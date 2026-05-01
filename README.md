@@ -122,6 +122,42 @@ script asks for this, but here's the reference:
 | **Azure** | `Standard_DS3_v2` |
 | **GCP** | `n1-standard-4` |
 
+### Optional: VIIRS Nighttime Lights (Economic Activity Proxy)
+
+The app can optionally display **VIIRS nighttime radiance** per H3 cell as
+a proxy for economic activity. If the data is present, radiance values appear
+in the hex tooltip; if absent, everything still works without it.
+
+The VIIRS annual composite is published by the
+[Earth Observation Group (EOG)](https://eogdata.mines.edu/products/vnl/#annual_v2)
+under **CC BY 4.0** license.
+
+**Steps to enable:**
+
+1. Create a free account at https://eogdata.mines.edu
+2. Download the **Annual VNL V2** `median_masked` GeoTIFF from the EOG website
+   (browser download — the file is ~2-3 GB)
+3. Unzip the `.tif.gz` to get the `.tif` file
+4. Create the Volume (if it doesn't exist):
+   ```sql
+   CREATE VOLUME IF NOT EXISTS <catalog>.<schema>.viirs_nighttime_lights;
+   ```
+5. Upload the `.tif` file to the Volume via the Databricks UI (drag-and-drop)
+   or CLI:
+   ```bash
+   databricks fs cp ./viirs_file.tif dbfs:/Volumes/<catalog>/<schema>/viirs_nighttime_lights/
+   ```
+6. Re-run the ETL job — the `create_gold_radiance` task picks up the file
+   automatically and precomputes radiance for the 37 training cities
+
+The Volume path is derived from the existing `catalog` and `schema` bundle
+variables (`/Volumes/{catalog}/{schema}/viirs_nighttime_lights/`), so no
+additional configuration is needed.
+
+> **Citation (required by CC BY 4.0):**
+> Elvidge, C.D, Zhizhin, M., Ghosh T., Hsu FC, Taneja J. "Annual time
+> series of global VIIRS nighttime lights derived from monthly averages:
+> 2012 to 2019". Remote Sensing 2021, 13(5), p.922
 ---
 
 ## Configuration
