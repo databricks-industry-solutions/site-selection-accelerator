@@ -786,6 +786,92 @@ DROP SCHEMA IF EXISTS `<catalog>`.`<schema>` CASCADE;
 
 ---
 
+## Third-Party Licenses & Acknowledgements
+
+This accelerator builds on open-source software and publicly licensed datasets.
+All dependencies are distributed under permissive licenses (Apache-2.0, MIT,
+BSD-3-Clause, ISC) or open data licenses (CC BY 4.0). No dependencies are
+redistributed in this repository — they are installed at build time from PyPI,
+npm, or the Databricks Marketplace.
+
+### Python Dependencies
+
+Declared in `packages/app/pyproject.toml`.
+
+| Package | License | Source |
+|---|---|---|
+| fastapi | MIT | https://github.com/fastapi/fastapi |
+| pydantic-settings | MIT | https://github.com/pydantic/pydantic-settings |
+| uvicorn | BSD-3-Clause | https://github.com/encode/uvicorn |
+| databricks-sdk | Apache-2.0 | https://github.com/databricks/databricks-sdk-py |
+| pandas | BSD-3-Clause | https://github.com/pandas-dev/pandas |
+| numpy | BSD-3-Clause | https://github.com/numpy/numpy |
+| h3 | Apache-2.0 | https://github.com/uber/h3-py |
+| scikit-learn | BSD-3-Clause | https://github.com/scikit-learn/scikit-learn |
+| geopandas | BSD-3-Clause | https://github.com/geopandas/geopandas |
+| shapely | BSD-3-Clause | https://github.com/shapely/shapely |
+| srai | Apache-2.0 | https://github.com/kraina-ai/srai |
+| geopy | MIT | https://github.com/geopy/geopy |
+| pyarrow | Apache-2.0 | https://github.com/apache/arrow |
+| python-dotenv | BSD-3-Clause | https://github.com/theskumar/python-dotenv |
+| rasterio | BSD-3-Clause | https://github.com/rasterio/rasterio |
+| h3ronpy | MIT / Apache-2.0 | https://github.com/nmandery/h3ronpy |
+| hatchling (build) | MIT | https://github.com/pypa/hatch |
+| uv-dynamic-versioning (build) | MIT | https://github.com/ninoseki/uv-dynamic-versioning |
+
+### Frontend (Node.js / npm) Dependencies
+
+Declared in `packages/app/package.json`.
+
+| Package | License | Source |
+|---|---|---|
+| react, react-dom | MIT | https://github.com/facebook/react |
+| @deck.gl/* (deck.gl) | MIT | https://github.com/visgl/deck.gl |
+| maplibre-gl | BSD-3-Clause | https://github.com/maplibre/maplibre-gl-js |
+| react-map-gl | MIT | https://github.com/visgl/react-map-gl |
+| @radix-ui/react-* | MIT | https://github.com/radix-ui/primitives |
+| shadcn/ui (component patterns) | MIT | https://github.com/shadcn-ui/ui |
+| @tanstack/react-query | MIT | https://github.com/TanStack/query |
+| @tanstack/react-router | MIT | https://github.com/TanStack/router |
+| recharts | MIT | https://github.com/recharts/recharts |
+| terra-draw, terra-draw-maplibre-gl-adapter | MIT | https://github.com/JamesLMilner/terra-draw |
+| tailwindcss, @tailwindcss/vite | MIT | https://github.com/tailwindlabs/tailwindcss |
+| tw-animate-css | MIT | https://github.com/Wombosvideo/tw-animate-css |
+| axios | MIT | https://github.com/axios/axios |
+| lucide-react | ISC | https://github.com/lucide-icons/lucide |
+| motion | MIT | https://github.com/motiondivision/motion |
+| sonner | MIT | https://github.com/emilkowalski/sonner |
+| class-variance-authority | Apache-2.0 | https://github.com/joe-bell/cva |
+| clsx | MIT | https://github.com/lukeed/clsx |
+| tailwind-merge | MIT | https://github.com/dcastil/tailwind-merge |
+| react-error-boundary | MIT | https://github.com/bvaughn/react-error-boundary |
+| react-is | MIT | https://github.com/facebook/react |
+| @opentelemetry/* | Apache-2.0 | https://github.com/open-telemetry/opentelemetry-js |
+| typescript | Apache-2.0 | https://github.com/microsoft/TypeScript |
+| vite, @vitejs/plugin-react | MIT | https://github.com/vitejs/vite |
+| smol-toml | MIT | https://github.com/squirrelchat/smol-toml |
+
+### Data Sources
+
+| Source | License | How It's Used |
+|---|---|---|
+| CARTO Overture Maps — Places, Divisions, Buildings | CC BY 4.0 | Installed by the user from the Databricks Marketplace. Not redistributed. |
+| VIIRS Annual Nighttime Lights V2 (Earth Observation Group, Colorado School of Mines) | CC BY 4.0 | Optional. Downloaded by the user from https://eogdata.mines.edu. Not redistributed. Citation in the [VIIRS Nighttime Lights](#viirs-nighttime-lights-economic-activity-proxy) section. |
+
+### Databricks-Managed Services
+
+The app calls the following Databricks-managed Foundation Model endpoints when
+available. These are not redistributed and are governed by the Databricks
+service terms in your workspace:
+
+- `databricks-meta-llama-3-3-70b-instruct` (via `ai_query()`)
+- `databricks-claude-opus-4-6` (via Model Serving)
+
+Both are optional — the app falls back to non-LLM alternatives if they are
+unavailable.
+
+---
+
 ## License
 
 This solution accelerator is provided as-is for demonstration purposes.
