@@ -786,13 +786,9 @@ DROP SCHEMA IF EXISTS `<catalog>`.`<schema>` CASCADE;
 
 ---
 
-## Third-Party Licenses & Acknowledgements
+## Licensing
 
-This accelerator builds on open-source software and publicly licensed datasets.
-All dependencies are distributed under permissive licenses (Apache-2.0, MIT,
-BSD-3-Clause, ISC) or open data licenses (CC BY 4.0). No dependencies are
-redistributed in this repository — they are installed at build time from PyPI,
-npm, or the Databricks Marketplace.
+© 2026 Databricks, Inc. All rights reserved. The materials in this repo are provided subject to the Databricks License [https://databricks.com/db-license-source]. All included or referenced third party libraries are subject to the licenses set forth below.
 
 ### Python Dependencies
 
@@ -853,10 +849,10 @@ Declared in `packages/app/package.json`.
 
 ### Data Sources
 
-| Source | License | How It's Used |
+| Dataset | License | Source |
 |---|---|---|
-| CARTO Overture Maps — Places, Divisions, Buildings | CC BY 4.0 | Installed by the user from the Databricks Marketplace. Not redistributed. |
-| VIIRS Annual Nighttime Lights V2 (Earth Observation Group, Colorado School of Mines) | CC BY 4.0 | Optional. Downloaded by the user from https://eogdata.mines.edu. Not redistributed. Citation in the [VIIRS Nighttime Lights](#viirs-nighttime-lights-economic-activity-proxy) section. |
+| CARTO Overture Maps — Places, Divisions, Buildings | CC BY 4.0 | Databricks Marketplace |
+| VIIRS Annual Nighttime Lights V2 (Earth Observation Group, Colorado School of Mines) | CC BY 4.0 | Optional. Downloaded from https://eogdata.mines.edu. Citation in the [VIIRS Nighttime Lights](#viirs-nighttime-lights-economic-activity-proxy) section. |
 
 ### Databricks-Managed Services
 
