@@ -9,42 +9,11 @@ resources:
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
-        - task_key: "create_gold_cities"
+        - task_key: "refresh_gold_pipeline"
           depends_on:
             - task_key: "setup_schema"
-          notebook_task:
-            notebook_path: ../src/pipeline/transformations/gold_cities.py
-            base_parameters:
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              carto_divisions_catalog: ${var.carto_divisions_catalog}
-        - task_key: "create_gold_places"
-          depends_on:
-            - task_key: "setup_schema"
-          notebook_task:
-            notebook_path: ../src/pipeline/transformations/gold_places.py
-            base_parameters:
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              carto_places_catalog: ${var.carto_places_catalog}
-        - task_key: "create_gold_buildings"
-          depends_on:
-            - task_key: "setup_schema"
-          notebook_task:
-            notebook_path: ../src/pipeline/transformations/gold_buildings.py
-            base_parameters:
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              carto_buildings_catalog: ${var.carto_buildings_catalog}
-        - task_key: "create_gold_places_enriched"
-          depends_on:
-            - task_key: "setup_schema"
-          notebook_task:
-            notebook_path: ../src/pipeline/transformations/gold_places_enriched.py
-            base_parameters:
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              carto_places_catalog: ${var.carto_places_catalog}
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.geospatial_pipeline.id}
         - task_key: "create_analysis_tables"
           depends_on:
             - task_key: "setup_schema"
@@ -55,7 +24,7 @@ resources:
               schema: ${var.schema}
         - task_key: "create_gold_radiance"
           depends_on:
-            - task_key: "create_gold_cities"
+            - task_key: "refresh_gold_pipeline"
           notebook_task:
             notebook_path: ../src/pipeline/transformations/create_gold_radiance.py
             base_parameters:
@@ -75,9 +44,7 @@ resources:
           job_cluster_key: "single_node"
         - task_key: "setup_genie_space"
           depends_on:
-            - task_key: "create_gold_places_enriched"
-            - task_key: "create_gold_cities"
-            - task_key: "create_gold_buildings"
+            - task_key: "refresh_gold_pipeline"
             - task_key: "create_analysis_tables"
             - task_key: "create_gold_radiance"
           notebook_task:
@@ -89,9 +56,7 @@ resources:
           environment_key: "genie_setup"
         - task_key: "train_hex2vec"
           depends_on:
-            - task_key: "create_gold_cities"
-            - task_key: "create_gold_places"
-            - task_key: "create_gold_buildings"
+            - task_key: "refresh_gold_pipeline"
           notebook_task:
             notebook_path: ../src/pipeline/train_hex2vec.py
             base_parameters:

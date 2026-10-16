@@ -1,0 +1,16 @@
+resources:
+  pipelines:
+    geospatial_pipeline:
+      name: "[${bundle.target}] Site Selection - Overture Medallion Pipeline"
+      catalog: ${var.catalog}
+      schema: ${var.schema}
+      serverless: true
+      continuous: false
+      photon: true
+      configuration:
+        carto_places_catalog: ${var.carto_places_catalog}
+        carto_buildings_catalog: ${var.carto_buildings_catalog}
+        carto_divisions_catalog: ${var.carto_divisions_catalog}
+      libraries:
+        - glob:
+            include: ../src/pipeline/lakeflow/**
