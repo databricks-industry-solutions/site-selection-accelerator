@@ -9,7 +9,7 @@ import pandas as pd
 from fastapi import HTTPException, Query
 from fastapi.responses import StreamingResponse
 
-from .core import create_router
+from .core import Dependencies, create_router
 from .models import (
     AnalyzeRequest,
     AnalyzeResultOut,
@@ -36,6 +36,9 @@ from .models import (
     ResolveAddressesResponse,
     ResolvedAddress,
     ResolvedPOI,
+    ShortlistAddIn,
+    ShortlistItemOut,
+    ShortlistUpdateIn,
     VersionOut,
 )
 from . import cache
@@ -68,6 +71,17 @@ def _clean_text(value: object) -> str:
 def _h3_center(cell_id: int) -> tuple[float, float]:
     hex_str = _h3_int_to_hex(cell_id)
     return h3.cell_to_latlng(hex_str)
+
+
+def _opt_round(value: object, ndigits: int) -> float | None:
+    if value is None or pd.isna(value):
+        return None
+    return round(float(value), ndigits)
+
+
+def _user_key(headers) -> str:
+    """Identity the shortlist is scoped to (forwarded by Databricks Apps)."""
+    return headers.user_email or headers.user_name or "local-dev"
 
 
 def _score_to_rgba(score: float) -> list[int]:
@@ -213,7 +227,7 @@ async def resolve_addresses(req: ResolveAddressesRequest):
 # -- Analyze (SSE) ------------------------------------------------------------
 
 @router.post("/analyze", operation_id="analyze")
-async def analyze(req: AnalyzeRequest) -> StreamingResponse:
+async def analyze(req: AnalyzeRequest, headers: Dependencies.Headers) -> StreamingResponse:
     """Run the full site-selection pipeline, streaming progress via SSE.
 
     Final event contains the session_id for retrieving results.
@@ -233,7 +247,11 @@ async def analyze(req: AnalyzeRequest) -> StreamingResponse:
                 tessellate_city,
             )
             from embeddings import load_hex2vec, normalise_buildings, run_embedding_pipeline
-            from similarity import compute_opportunity_score, compute_similarity
+            from similarity import (
+                compute_cannibalization,
+                compute_opportunity_score,
+                compute_similarity,
+            )
             from explainability import build_brand_profile, tooltip_snippet
             from brand_search import (
                 discover_brand_locations,
@@ -520,7 +538,18 @@ async def analyze(req: AnalyzeRequest) -> StreamingResponse:
 
             address_lookup = get_nearest_address_per_cell(pois_df)
 
-            # Cache results
+            # Mark existing target brand locations in scored so they are excluded
+            if existing_target_locs:
+                target_cell_ints = set()
+                for loc in existing_target_locs:
+                    hex_str = h3.latlng_to_cell(loc["lat"], loc["lon"], req.resolution)
+                    target_cell_ints.add(h3.str_to_int(hex_str))
+                scored.loc[scored["h3_cell"].isin(target_cell_ints), "is_brand_cell"] = True
+
+            # Cannibalization: trade-area overlap with the brand's own stores
+            scored = compute_cannibalization(scored, catchment_km=req.catchment_km)
+
+            # Cache results (memory) and write through to Lakebase
             yield _sse({"type": "progress", "step": "caching_results", "pct": 95})
             pr = PipelineResult(
                 count_vectors=count_vectors,
@@ -537,14 +566,17 @@ async def analyze(req: AnalyzeRequest) -> StreamingResponse:
                 brand_pois=brand_pois_df,
             )
             session_id = cache.save(pr)
+            try:
+                import lakebase
 
-            # Mark existing target brand locations in scored so they are excluded
-            if existing_target_locs:
-                target_cell_ints = set()
-                for loc in existing_target_locs:
-                    hex_str = h3.latlng_to_cell(loc["lat"], loc["lon"], req.resolution)
-                    target_cell_ints.add(h3.str_to_int(hex_str))
-                scored.loc[scored["h3_cell"].isin(target_cell_ints), "is_brand_cell"] = True
+                lakebase.save_session(
+                    session_id, pr,
+                    created_by=_user_key(headers),
+                    brand=req.brand_input.value if req.brand_input.mode == "brand_name" else "",
+                    country=req.country, city=req.city, resolution=req.resolution,
+                )
+            except Exception:
+                log.exception("Lakebase write-through failed; session %s is memory-only", session_id)
 
             # Build hexagon data for the response
             hexagons = _build_hexagon_list(scored, address_lookup, count_vectors, brand_avg)
@@ -782,12 +814,16 @@ async def get_hexagon_detail(session_id: str, hex_id: str):
         similarity = float(row_match.iloc[0]["similarity"]) if not row_match.empty else 0.0
         opp_score = None
         poi_density_val = 0
+        cannibalization = None
+        nearest_store = None
         if not row_match.empty:
             r = row_match.iloc[0]
             if "opportunity_score" in r.index:
                 opp_score = float(r["opportunity_score"])
             if "poi_density" in r.index:
                 poi_density_val = int(r["poi_density"])
+            cannibalization = _opt_round(r.get("cannibalization_risk"), 4)
+            nearest_store = _opt_round(r.get("nearest_store_km"), 3)
 
         return HexagonDetailOut(
             h3_cell=h3_cell,
@@ -796,6 +832,8 @@ async def get_hexagon_detail(session_id: str, hex_id: str):
             similarity=similarity,
             opportunity_score=opp_score,
             poi_density=poi_density_val,
+            cannibalization_risk=cannibalization,
+            nearest_store_km=nearest_store,
             explanation_summary=summary,
             competition=comp_info,
             competitor_pois=cell_competitor_pois,
@@ -808,6 +846,51 @@ async def get_hexagon_detail(session_id: str, hex_id: str):
     except Exception as e:
         log.exception("hexagon-detail endpoint failed")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# -- Shortlist (Lakebase) -----------------------------------------------------
+
+def _require_lakebase():
+    import lakebase
+
+    if not lakebase.is_enabled():
+        raise HTTPException(
+            status_code=503,
+            detail="Shortlist needs the Lakebase database resource attached to the app",
+        )
+    return lakebase
+
+
+@router.get("/shortlist", response_model=list[ShortlistItemOut], operation_id="listShortlist")
+async def list_shortlist(headers: Dependencies.Headers, session_id: str | None = Query(None)):
+    lb = _require_lakebase()
+    return lb.list_shortlist(_user_key(headers), session_id=session_id)
+
+
+@router.post("/shortlist", response_model=ShortlistItemOut, operation_id="addToShortlist")
+async def add_to_shortlist(req: ShortlistAddIn, headers: Dependencies.Headers):
+    lb = _require_lakebase()
+    try:
+        return lb.add_to_shortlist(_user_key(headers), req.session_id, req.hex_id, req.note)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.patch("/shortlist/{item_id}", response_model=ShortlistItemOut, operation_id="updateShortlistItem")
+async def update_shortlist_item(item_id: int, req: ShortlistUpdateIn, headers: Dependencies.Headers):
+    lb = _require_lakebase()
+    item = lb.update_shortlist(_user_key(headers), item_id, status=req.status, note=req.note)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Shortlist item not found")
+    return item
+
+
+@router.delete("/shortlist/{item_id}", operation_id="removeShortlistItem")
+async def remove_shortlist_item(item_id: int, headers: Dependencies.Headers) -> dict:
+    lb = _require_lakebase()
+    if not lb.remove_from_shortlist(_user_key(headers), item_id):
+        raise HTTPException(status_code=404, detail="Shortlist item not found")
+    return {"deleted": item_id}
 
 
 # -- Genie Debug (brand POIs + competitor summary) ----------------------------
@@ -1203,6 +1286,8 @@ def _build_hexagon_list(
             competitor_count=int(row.get("competitor_count", 0)) if has_competition else 0,
             top_competitors=str(row.get("top_competitors", "")) if has_competition else "",
             cat_detail=tooltip_snippet(cell, count_vectors, brand_avg, max_cats=4),
+            cannibalization_risk=_opt_round(row.get("cannibalization_risk"), 4),
+            nearest_store_km=_opt_round(row.get("nearest_store_km"), 3),
         ))
     return hexagons
 

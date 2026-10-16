@@ -462,6 +462,17 @@ function TooltipContent({
                 <span className="font-medium">{hex.competitor_count}</span>
               </>
             )}
+            {hex.cannibalization_risk != null && hex.nearest_store_km != null && (
+              <>
+                <span className="text-muted-foreground">Cannibalization</span>
+                <span className="font-medium">
+                  {(hex.cannibalization_risk * 100).toFixed(0)}%
+                  <span className="ml-1 text-xs text-muted-foreground">
+                    ({hex.nearest_store_km.toFixed(1)} km to own store)
+                  </span>
+                </span>
+              </>
+            )}
           </>
         )}
       </div>

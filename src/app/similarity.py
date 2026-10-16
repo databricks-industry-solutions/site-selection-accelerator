@@ -163,3 +163,59 @@ def get_top_opportunities(
         .head(top_n)
         .reset_index(drop=True)
     )
+
+
+_EARTH_RADIUS_KM = 6371.0088
+
+
+def compute_cannibalization(
+    scored: pd.DataFrame,
+    catchment_km: float = 1.5,
+) -> pd.DataFrame:
+    """Estimate how much of each candidate cell's trade area the brand already serves.
+
+    Each existing brand cell (``is_brand_cell``) and each candidate is given a
+    circular catchment of radius ``catchment_km``. A candidate's
+    ``cannibalization_risk`` is the largest fraction of its catchment that
+    overlaps an existing store's catchment (the circle-circle "lens" area over
+    the circle area): 0 = entirely new territory, 1 = same trade area as an
+    existing store. ``nearest_store_km`` is the distance to the closest one.
+
+    Real-estate teams typically screen on exactly this — sales transfer from
+    an existing store is the main reason a "high-similarity" site
+    under-delivers — so it is reported alongside the opportunity score rather
+    than folded into it, letting the user see the trade-off.
+    """
+    scored = scored.copy()
+    own = scored.loc[scored["is_brand_cell"], "h3_cell"].astype("int64").unique()
+    if len(own) == 0:
+        scored["cannibalization_risk"] = 0.0
+        scored["nearest_store_km"] = np.nan
+        return scored
+
+    def _latlon_rad(cells) -> np.ndarray:
+        pts = [h3.cell_to_latlng(h3.int_to_str(int(c))) for c in cells]
+        return np.radians(np.asarray(pts, dtype=float))
+
+    cand = _latlon_rad(scored["h3_cell"].astype("int64"))
+    stores = _latlon_rad(own)
+
+    # Haversine distance matrix: candidates x existing stores (km).
+    dlat = cand[:, None, 0] - stores[None, :, 0]
+    dlon = cand[:, None, 1] - stores[None, :, 1]
+    a = (
+        np.sin(dlat / 2) ** 2
+        + np.cos(cand[:, None, 0]) * np.cos(stores[None, :, 0]) * np.sin(dlon / 2) ** 2
+    )
+    dist = 2 * _EARTH_RADIUS_KM * np.arcsin(np.sqrt(np.clip(a, 0.0, 1.0)))
+    nearest = dist.min(axis=1)
+
+    # Overlap fraction of two equal circles of radius r at centre distance d.
+    r = float(catchment_km)
+    d = np.minimum(nearest, 2 * r)
+    lens = 2 * r**2 * np.arccos(d / (2 * r)) - (d / 2) * np.sqrt(np.maximum(4 * r**2 - d**2, 0.0))
+    overlap = np.clip(lens / (np.pi * r**2), 0.0, 1.0)
+
+    scored["nearest_store_km"] = np.round(nearest, 3)
+    scored["cannibalization_risk"] = np.round(overlap, 4)
+    return scored

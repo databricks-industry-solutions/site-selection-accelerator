@@ -21,7 +21,9 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { ChevronDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ChevronDown, Star } from "lucide-react";
+import { addToShortlist } from "@/lib/shortlist";
 import type { HexagonData, HexagonDetail, GenieDebug } from "@/lib/types";
 
 interface FingerprintPanelProps {
@@ -44,6 +46,17 @@ export function FingerprintPanel({
   const [metric, setMetric] = useState<"counts" | "pct">("pct");
 
   const [error, setError] = useState<string | null>(null);
+  const [shortlistState, setShortlistState] = useState<"idle" | "saving" | "saved" | string>("idle");
+
+  useEffect(() => setShortlistState("idle"), [hex]);
+
+  const handleShortlist = () => {
+    if (!hex || !sessionId) return;
+    setShortlistState("saving");
+    addToShortlist(sessionId, hex.hex_id)
+      .then(() => setShortlistState("saved"))
+      .catch((e) => setShortlistState(e instanceof Error ? e.message : "Failed to save"));
+  };
 
   const cellCompetitorStores = useMemo(() => {
     if (!detail?.competitor_pois?.length) return [];
@@ -124,7 +137,35 @@ export function FingerprintPanel({
                   Competition: {detail.competition.competitor_count}
                 </Badge>
               )}
+              {detail.cannibalization_risk != null && detail.nearest_store_km != null && (
+                <Badge
+                  variant={detail.cannibalization_risk >= 0.5 ? "destructive" : "secondary"}
+                  className="text-xs"
+                  title="Share of this site's catchment already covered by one of the brand's existing stores"
+                >
+                  Cannibalization: {(detail.cannibalization_risk * 100).toFixed(0)}% ·{" "}
+                  {detail.nearest_store_km.toFixed(1)} km to own store
+                </Badge>
+              )}
             </div>
+
+            {!hex?.is_brand_cell && (
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant={shortlistState === "saved" ? "secondary" : "default"}
+                  className="gap-2"
+                  disabled={shortlistState === "saving" || shortlistState === "saved"}
+                  onClick={handleShortlist}
+                >
+                  <Star className="h-4 w-4" />
+                  {shortlistState === "saved" ? "On shortlist" : "Add to shortlist"}
+                </Button>
+                {!["idle", "saving", "saved"].includes(shortlistState) && (
+                  <span className="text-xs text-destructive">{shortlistState}</span>
+                )}
+              </div>
+            )}
 
             {/* Explanation summary (above fingerprint) */}
             {detail.explanation_summary && (

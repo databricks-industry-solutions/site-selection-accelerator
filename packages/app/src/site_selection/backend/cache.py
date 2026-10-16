@@ -1,17 +1,22 @@
-"""In-memory result cache for pipeline outputs.
+"""Result cache for pipeline outputs: in-memory, backed by Lakebase.
 
 Keyed by session_id so the frontend can query any hexagon's
-fingerprint on demand after a pipeline run completes.
+fingerprint on demand after a pipeline run completes. The in-process
+dict is a hot cache only; Lakebase is the durable copy, so a session
+survives app restarts and eviction (see lakebase.py).
 """
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 import uuid
 from dataclasses import dataclass, field
 
 import pandas as pd
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -54,7 +59,24 @@ def save(result: PipelineResult) -> str:
 
 def get(session_id: str) -> PipelineResult | None:
     with _lock:
-        return _store.get(session_id)
+        hit = _store.get(session_id)
+    if hit is not None:
+        return hit
+    try:
+        import lakebase
+
+        fields = lakebase.load_session(session_id)
+    except Exception:
+        log.exception("Lakebase lookup failed for session %s", session_id)
+        return None
+    if fields is None:
+        return None
+    # Re-stamp so the in-memory TTL doesn't evict it straight away.
+    restored = PipelineResult(**{**fields, "created_at": time.time()})
+    with _lock:
+        _store[session_id] = restored
+        _evict()
+    return restored
 
 
 def _evict() -> None:

@@ -22,6 +22,7 @@ export interface AnalysisSummary {
 export interface AnalyzeRequest {
     beta?: number;
     brand_input: BrandInput;
+    catchment_km?: number;
     categories: string[];
     city: string;
     competitor_brand?: string;
@@ -147,6 +148,7 @@ export interface HTTPValidationError {
 }
 export interface HexagonData {
     address?: string;
+    cannibalization_risk?: number | null;
     cat_detail?: string;
     competitor_count?: number;
     h3_cell: number;
@@ -154,6 +156,7 @@ export interface HexagonData {
     is_brand_cell: boolean;
     lat: number;
     lon: number;
+    nearest_store_km?: number | null;
     opportunity_score?: number | null;
     poi_density?: number;
     radiance?: number | null;
@@ -162,6 +165,7 @@ export interface HexagonData {
 }
 export interface HexagonDetailOut {
     address: string;
+    cannibalization_risk?: number | null;
     cell_pois?: CellPOI[];
     cell_pois_title?: string;
     competition?: CompetitionInfo | null;
@@ -170,6 +174,7 @@ export interface HexagonDetailOut {
     fingerprint: FingerprintRow[];
     h3_cell: number;
     hex_id: string;
+    nearest_store_km?: number | null;
     opportunity_score?: number | null;
     poi_density?: number;
     similarity: number;
@@ -197,6 +202,36 @@ export interface ResolvedPOI {
     name: string;
     poi_id: string;
 }
+export interface ShortlistAddIn {
+    hex_id: string;
+    note?: string;
+    session_id: string;
+}
+export interface ShortlistItemOut {
+    address?: string | null;
+    brand?: string | null;
+    cannibalization_risk?: number | null;
+    city?: string | null;
+    competitor_count?: number | null;
+    country?: string | null;
+    created_at: string;
+    created_by?: string;
+    hex_id: string;
+    id: number;
+    lat?: number | null;
+    lon?: number | null;
+    nearest_store_km?: number | null;
+    note?: string;
+    opportunity_score?: number | null;
+    session_id: string;
+    similarity?: number | null;
+    status: "candidate" | "site_visit" | "negotiating" | "rejected";
+    updated_at: string;
+}
+export interface ShortlistUpdateIn {
+    note?: string | null;
+    status?: "candidate" | "site_visit" | "negotiating" | "rejected" | null;
+}
 export interface ValidationError {
     ctx?: Record<string, unknown>;
     input?: unknown;
@@ -207,7 +242,15 @@ export interface ValidationError {
 export interface VersionOut {
     version: string;
 }
-export const analyze = async (data: AnalyzeRequest, options?: RequestInit): Promise<{
+export interface AnalyzeParams {
+    "X-Forwarded-Host"?: string | null;
+    "X-Forwarded-Preferred-Username"?: string | null;
+    "X-Forwarded-User"?: string | null;
+    "X-Forwarded-Email"?: string | null;
+    "X-Request-Id"?: string | null;
+    "X-Forwarded-Access-Token"?: string | null;
+}
+export const analyze = async (data: AnalyzeRequest, params?: AnalyzeParams, options?: RequestInit): Promise<{
     data: unknown;
 }> =>{
     const res = await fetch("/api/analyze", {
@@ -215,6 +258,24 @@ export const analyze = async (data: AnalyzeRequest, options?: RequestInit): Prom
         method: "POST",
         headers: {
             "Content-Type": "application/json",
+            ...(params?.["X-Forwarded-Host"] != null && {
+                "X-Forwarded-Host": params["X-Forwarded-Host"]
+            }),
+            ...(params?.["X-Forwarded-Preferred-Username"] != null && {
+                "X-Forwarded-Preferred-Username": params["X-Forwarded-Preferred-Username"]
+            }),
+            ...(params?.["X-Forwarded-User"] != null && {
+                "X-Forwarded-User": params["X-Forwarded-User"]
+            }),
+            ...(params?.["X-Forwarded-Email"] != null && {
+                "X-Forwarded-Email": params["X-Forwarded-Email"]
+            }),
+            ...(params?.["X-Request-Id"] != null && {
+                "X-Request-Id": params["X-Request-Id"]
+            }),
+            ...(params?.["X-Forwarded-Access-Token"] != null && {
+                "X-Forwarded-Access-Token": params["X-Forwarded-Access-Token"]
+            }),
             ...options?.headers
         },
         body: JSON.stringify(data)
@@ -236,10 +297,13 @@ export const analyze = async (data: AnalyzeRequest, options?: RequestInit): Prom
 export function useAnalyze(options?: {
     mutation?: UseMutationOptions<{
         data: unknown;
-    }, ApiError, AnalyzeRequest>;
+    }, ApiError, {
+        params: AnalyzeParams;
+        data: AnalyzeRequest;
+    }>;
 }) {
     return useMutation({
-        mutationFn: (data)=>analyze(data),
+        mutationFn: (vars)=>analyze(vars.data, vars.params),
         ...options?.mutation
     });
 }
@@ -805,6 +869,289 @@ export function usePersistAnalysisWithContext(options?: {
 }) {
     return useMutation({
         mutationFn: (vars)=>persistAnalysisWithContext(vars.params, vars.data),
+        ...options?.mutation
+    });
+}
+export interface ListShortlistParams {
+    session_id?: string | null;
+    "X-Forwarded-Host"?: string | null;
+    "X-Forwarded-Preferred-Username"?: string | null;
+    "X-Forwarded-User"?: string | null;
+    "X-Forwarded-Email"?: string | null;
+    "X-Request-Id"?: string | null;
+    "X-Forwarded-Access-Token"?: string | null;
+}
+export const listShortlist = async (params?: ListShortlistParams, options?: RequestInit): Promise<{
+    data: ShortlistItemOut[];
+}> =>{
+    const searchParams = new URLSearchParams();
+    if (params?.session_id != null) searchParams.set("session_id", String(params?.session_id));
+    const queryString = searchParams.toString();
+    const url = queryString ? `/api/shortlist?${queryString}` : "/api/shortlist";
+    const res = await fetch(url, {
+        ...options,
+        method: "GET",
+        headers: {
+            ...(params?.["X-Forwarded-Host"] != null && {
+                "X-Forwarded-Host": params["X-Forwarded-Host"]
+            }),
+            ...(params?.["X-Forwarded-Preferred-Username"] != null && {
+                "X-Forwarded-Preferred-Username": params["X-Forwarded-Preferred-Username"]
+            }),
+            ...(params?.["X-Forwarded-User"] != null && {
+                "X-Forwarded-User": params["X-Forwarded-User"]
+            }),
+            ...(params?.["X-Forwarded-Email"] != null && {
+                "X-Forwarded-Email": params["X-Forwarded-Email"]
+            }),
+            ...(params?.["X-Request-Id"] != null && {
+                "X-Request-Id": params["X-Request-Id"]
+            }),
+            ...(params?.["X-Forwarded-Access-Token"] != null && {
+                "X-Forwarded-Access-Token": params["X-Forwarded-Access-Token"]
+            }),
+            ...options?.headers
+        }
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export const listShortlistKey = (params?: ListShortlistParams)=>{
+    return [
+        "/api/shortlist",
+        params
+    ] as const;
+};
+export function useListShortlist<TData = {
+    data: ShortlistItemOut[];
+}>(options?: {
+    params?: ListShortlistParams;
+    query?: Omit<UseQueryOptions<{
+        data: ShortlistItemOut[];
+    }, ApiError, TData>, "queryKey" | "queryFn">;
+}) {
+    return useQuery({
+        queryKey: listShortlistKey(options?.params),
+        queryFn: ()=>listShortlist(options?.params),
+        ...options?.query
+    });
+}
+export function useListShortlistSuspense<TData = {
+    data: ShortlistItemOut[];
+}>(options?: {
+    params?: ListShortlistParams;
+    query?: Omit<UseSuspenseQueryOptions<{
+        data: ShortlistItemOut[];
+    }, ApiError, TData>, "queryKey" | "queryFn">;
+}) {
+    return useSuspenseQuery({
+        queryKey: listShortlistKey(options?.params),
+        queryFn: ()=>listShortlist(options?.params),
+        ...options?.query
+    });
+}
+export interface AddToShortlistParams {
+    "X-Forwarded-Host"?: string | null;
+    "X-Forwarded-Preferred-Username"?: string | null;
+    "X-Forwarded-User"?: string | null;
+    "X-Forwarded-Email"?: string | null;
+    "X-Request-Id"?: string | null;
+    "X-Forwarded-Access-Token"?: string | null;
+}
+export const addToShortlist = async (data: ShortlistAddIn, params?: AddToShortlistParams, options?: RequestInit): Promise<{
+    data: ShortlistItemOut;
+}> =>{
+    const res = await fetch("/api/shortlist", {
+        ...options,
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...(params?.["X-Forwarded-Host"] != null && {
+                "X-Forwarded-Host": params["X-Forwarded-Host"]
+            }),
+            ...(params?.["X-Forwarded-Preferred-Username"] != null && {
+                "X-Forwarded-Preferred-Username": params["X-Forwarded-Preferred-Username"]
+            }),
+            ...(params?.["X-Forwarded-User"] != null && {
+                "X-Forwarded-User": params["X-Forwarded-User"]
+            }),
+            ...(params?.["X-Forwarded-Email"] != null && {
+                "X-Forwarded-Email": params["X-Forwarded-Email"]
+            }),
+            ...(params?.["X-Request-Id"] != null && {
+                "X-Request-Id": params["X-Request-Id"]
+            }),
+            ...(params?.["X-Forwarded-Access-Token"] != null && {
+                "X-Forwarded-Access-Token": params["X-Forwarded-Access-Token"]
+            }),
+            ...options?.headers
+        },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export function useAddToShortlist(options?: {
+    mutation?: UseMutationOptions<{
+        data: ShortlistItemOut;
+    }, ApiError, {
+        params: AddToShortlistParams;
+        data: ShortlistAddIn;
+    }>;
+}) {
+    return useMutation({
+        mutationFn: (vars)=>addToShortlist(vars.data, vars.params),
+        ...options?.mutation
+    });
+}
+export interface UpdateShortlistItemParams {
+    item_id: number;
+    "X-Forwarded-Host"?: string | null;
+    "X-Forwarded-Preferred-Username"?: string | null;
+    "X-Forwarded-User"?: string | null;
+    "X-Forwarded-Email"?: string | null;
+    "X-Request-Id"?: string | null;
+    "X-Forwarded-Access-Token"?: string | null;
+}
+export const updateShortlistItem = async (params: UpdateShortlistItemParams, data: ShortlistUpdateIn, options?: RequestInit): Promise<{
+    data: ShortlistItemOut;
+}> =>{
+    const res = await fetch(`/api/shortlist/${params.item_id}`, {
+        ...options,
+        method: "PATCH",
+        headers: {
+            "Content-Type": "application/json",
+            ...(params?.["X-Forwarded-Host"] != null && {
+                "X-Forwarded-Host": params["X-Forwarded-Host"]
+            }),
+            ...(params?.["X-Forwarded-Preferred-Username"] != null && {
+                "X-Forwarded-Preferred-Username": params["X-Forwarded-Preferred-Username"]
+            }),
+            ...(params?.["X-Forwarded-User"] != null && {
+                "X-Forwarded-User": params["X-Forwarded-User"]
+            }),
+            ...(params?.["X-Forwarded-Email"] != null && {
+                "X-Forwarded-Email": params["X-Forwarded-Email"]
+            }),
+            ...(params?.["X-Request-Id"] != null && {
+                "X-Request-Id": params["X-Request-Id"]
+            }),
+            ...(params?.["X-Forwarded-Access-Token"] != null && {
+                "X-Forwarded-Access-Token": params["X-Forwarded-Access-Token"]
+            }),
+            ...options?.headers
+        },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export function useUpdateShortlistItem(options?: {
+    mutation?: UseMutationOptions<{
+        data: ShortlistItemOut;
+    }, ApiError, {
+        params: UpdateShortlistItemParams;
+        data: ShortlistUpdateIn;
+    }>;
+}) {
+    return useMutation({
+        mutationFn: (vars)=>updateShortlistItem(vars.params, vars.data),
+        ...options?.mutation
+    });
+}
+export interface RemoveShortlistItemParams {
+    item_id: number;
+    "X-Forwarded-Host"?: string | null;
+    "X-Forwarded-Preferred-Username"?: string | null;
+    "X-Forwarded-User"?: string | null;
+    "X-Forwarded-Email"?: string | null;
+    "X-Request-Id"?: string | null;
+    "X-Forwarded-Access-Token"?: string | null;
+}
+export const removeShortlistItem = async (params: RemoveShortlistItemParams, options?: RequestInit): Promise<{
+    data: Record<string, unknown>;
+}> =>{
+    const res = await fetch(`/api/shortlist/${params.item_id}`, {
+        ...options,
+        method: "DELETE",
+        headers: {
+            ...(params?.["X-Forwarded-Host"] != null && {
+                "X-Forwarded-Host": params["X-Forwarded-Host"]
+            }),
+            ...(params?.["X-Forwarded-Preferred-Username"] != null && {
+                "X-Forwarded-Preferred-Username": params["X-Forwarded-Preferred-Username"]
+            }),
+            ...(params?.["X-Forwarded-User"] != null && {
+                "X-Forwarded-User": params["X-Forwarded-User"]
+            }),
+            ...(params?.["X-Forwarded-Email"] != null && {
+                "X-Forwarded-Email": params["X-Forwarded-Email"]
+            }),
+            ...(params?.["X-Request-Id"] != null && {
+                "X-Request-Id": params["X-Request-Id"]
+            }),
+            ...(params?.["X-Forwarded-Access-Token"] != null && {
+                "X-Forwarded-Access-Token": params["X-Forwarded-Access-Token"]
+            }),
+            ...options?.headers
+        }
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export function useRemoveShortlistItem(options?: {
+    mutation?: UseMutationOptions<{
+        data: Record<string, unknown>;
+    }, ApiError, {
+        params: RemoveShortlistItemParams;
+    }>;
+}) {
+    return useMutation({
+        mutationFn: (vars)=>removeShortlistItem(vars.params),
         ...options?.mutation
     });
 }

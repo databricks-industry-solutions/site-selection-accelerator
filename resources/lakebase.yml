@@ -1,0 +1,13 @@
+resources:
+  postgres_projects:
+    site_selection_db:
+      project_id: "site-selection-${bundle.target}"
+      display_name: "Site Selection Accelerator (${bundle.target})"
+      pg_version: 17
+      # Scale-to-zero: the app is interactive and bursty, so pay for compute
+      # only while someone is using it. A cold start resumes in well under a
+      # second, which the connection pool absorbs.
+      default_endpoint_settings:
+        autoscaling_limit_min_cu: 0.5
+        autoscaling_limit_max_cu: 2
+        suspend_timeout_duration: "300s"

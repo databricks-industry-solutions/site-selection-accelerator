@@ -68,7 +68,9 @@ print(f"Schema:  {schema}")
 # MAGIC     address           STRING,
 # MAGIC     poi_count         INT,
 # MAGIC     competitor_count  INT,
-# MAGIC     top_competitors   STRING
+# MAGIC     top_competitors   STRING,
+# MAGIC     cannibalization_risk DOUBLE,
+# MAGIC     nearest_store_km     DOUBLE
 # MAGIC ) USING DELTA
 
 # COMMAND ----------

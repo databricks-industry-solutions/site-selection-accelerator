@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Literal
+
 from pydantic import BaseModel, Field
 from .. import __version__
 
@@ -71,6 +74,7 @@ class AnalyzeRequest(BaseModel):
     competitor_brand: str = ""
     include_buildings: bool = True
     include_radiance: bool = True
+    catchment_km: float = Field(default=1.5, gt=0.0, le=20.0)
 
 
 class HexagonData(BaseModel):
@@ -87,6 +91,8 @@ class HexagonData(BaseModel):
     competitor_count: int = 0
     top_competitors: str = ""
     cat_detail: str = ""
+    cannibalization_risk: float | None = None
+    nearest_store_km: float | None = None
 
 
 class BrandLocationData(BaseModel):
@@ -182,6 +188,8 @@ class HexagonDetailOut(BaseModel):
     similarity: float
     opportunity_score: float | None = None
     poi_density: int = 0
+    cannibalization_risk: float | None = None
+    nearest_store_km: float | None = None
     explanation_summary: str = ""
     competition: CompetitionInfo | None = None
     competitor_pois: list[CompetitorPOI] = []
@@ -208,6 +216,44 @@ class GenieDebugOut(BaseModel):
 
 
 # -- Persist / Assets ---------------------------------------------------------
+
+# -- Shortlist (Lakebase) -------------------------------------------------------
+
+ShortlistStatus = Literal["candidate", "site_visit", "negotiating", "rejected"]
+
+
+class ShortlistAddIn(BaseModel):
+    session_id: str
+    hex_id: str
+    note: str = ""
+
+
+class ShortlistUpdateIn(BaseModel):
+    status: ShortlistStatus | None = None
+    note: str | None = None
+
+
+class ShortlistItemOut(BaseModel):
+    id: int
+    session_id: str
+    hex_id: str
+    brand: str | None = None
+    country: str | None = None
+    city: str | None = None
+    address: str | None = None
+    status: ShortlistStatus
+    note: str = ""
+    created_by: str = ""
+    created_at: datetime
+    updated_at: datetime
+    similarity: float | None = None
+    opportunity_score: float | None = None
+    cannibalization_risk: float | None = None
+    nearest_store_km: float | None = None
+    competitor_count: int | None = None
+    lat: float | None = None
+    lon: float | None = None
+
 
 class PersistResultOut(BaseModel):
     analysis_id: str

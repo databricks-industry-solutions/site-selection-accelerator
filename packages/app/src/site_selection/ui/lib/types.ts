@@ -65,6 +65,8 @@ export interface HexagonData {
   competitor_count: number;
   top_competitors: string;
   cat_detail: string;
+  cannibalization_risk: number | null;
+  nearest_store_km: number | null;
 }
 
 export interface BrandLocationData {
@@ -174,6 +176,8 @@ export interface HexagonDetail {
   similarity: number;
   opportunity_score: number | null;
   poi_density: number;
+  cannibalization_risk: number | null;
+  nearest_store_km: number | null;
   explanation_summary: string;
   competition: CompetitionInfo | null;
   competitor_pois: CompetitorPOI[];
@@ -240,3 +244,27 @@ export const STEP_LABELS: Record<string, string> = {
   caching_results: "Preparing results...",
   done: "Done!",
 };
+
+export type ShortlistStatus = "candidate" | "site_visit" | "negotiating" | "rejected";
+
+export interface ShortlistItem {
+  id: number;
+  session_id: string;
+  hex_id: string;
+  brand: string | null;
+  country: string | null;
+  city: string | null;
+  address: string | null;
+  status: ShortlistStatus;
+  note: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  similarity: number | null;
+  opportunity_score: number | null;
+  cannibalization_risk: number | null;
+  nearest_store_km: number | null;
+  competitor_count: number | null;
+  lat: number | null;
+  lon: number | null;
+}

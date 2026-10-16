@@ -5,6 +5,7 @@ import { ConfigSidebar } from "@/components/sidebar/config-sidebar";
 import { BrandProfileDialog } from "@/components/brand-profile/brand-profile-dialog";
 import { FingerprintPanel } from "@/components/fingerprint/fingerprint-panel";
 import { AssetsPopover } from "@/components/assets/assets-popover";
+import { ShortlistDialog } from "@/components/shortlist/shortlist-dialog";
 import { useAnalyze } from "@/lib/use-analyze";
 import { useMapDraw } from "@/lib/use-map-draw";
 import type { HexagonData, DrawingMode } from "@/lib/types";
@@ -81,7 +82,8 @@ function Index() {
         onClearDrawnFeatures={clear}
       />
 
-      <div className="absolute bottom-4 right-4 z-20">
+      <div className="absolute bottom-4 right-4 z-20 flex gap-2">
+        <ShortlistDialog />
         <AssetsPopover />
       </div>
 

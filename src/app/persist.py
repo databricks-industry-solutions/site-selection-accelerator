@@ -113,7 +113,8 @@ def ensure_analysis_tables() -> None:
             similarity DOUBLE, opportunity_score DOUBLE,
             is_brand_cell BOOLEAN, lat DOUBLE, lon DOUBLE,
             address STRING, poi_count INT, competitor_count INT,
-            top_competitors STRING
+            top_competitors STRING,
+            cannibalization_risk DOUBLE, nearest_store_km DOUBLE
         ) USING DELTA CLUSTER BY (analysis_id, similarity)""",
         f"""CREATE TABLE IF NOT EXISTS {ANALYSIS_FINGERPRINTS_TABLE} (
             analysis_id STRING NOT NULL, hex_id STRING,
@@ -316,10 +317,15 @@ def _persist_hexagons(analysis_id: str, pr: PipelineResult) -> None:
         scored["competitor_count"] = 0
         scored["top_competitors"] = ""
 
+    for col in ("cannibalization_risk", "nearest_store_km"):
+        if col not in scored.columns:
+            scored[col] = np.nan
+
     out = scored[
         ["analysis_id", "h3_cell", "hex_id", "similarity", "opportunity_score",
          "is_brand_cell", "lat", "lon", "address", "poi_count",
-         "competitor_count", "top_competitors"]
+         "competitor_count", "top_competitors",
+         "cannibalization_risk", "nearest_store_km"]
     ].copy()
 
     _copy_into(out, ANALYSIS_HEXAGONS_TABLE, analysis_id, "hexagons")
