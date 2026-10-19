@@ -74,7 +74,7 @@ class AnalyzeRequest(BaseModel):
     competitor_brand: str = ""
     include_buildings: bool = True
     include_radiance: bool = True
-    catchment_km: float = Field(default=1.5, gt=0.0, le=20.0)
+    catchment_km: float = Field(default=0.8, gt=0.0, le=20.0)
 
 
 class HexagonData(BaseModel):

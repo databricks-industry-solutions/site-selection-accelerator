@@ -457,7 +457,7 @@ natural language.
 ### Cannibalization and the Shortlist
 
 Every candidate cell is scored for **cannibalization risk**: the fraction of
-its catchment (default 1.5 km radius, `catchment_km` in the API) that overlaps
+its catchment (default 0.8 km radius — a 10-minute walk — `catchment_km` in the API) that overlaps
 the catchment of the brand's nearest existing store, plus the distance to that
 store. It appears in the hover tooltip and the hexagon panel. It is reported
 next to the opportunity score rather than folded into it, so you can see the

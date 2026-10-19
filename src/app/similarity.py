@@ -170,7 +170,7 @@ _EARTH_RADIUS_KM = 6371.0088
 
 def compute_cannibalization(
     scored: pd.DataFrame,
-    catchment_km: float = 1.5,
+    catchment_km: float = 0.8,
 ) -> pd.DataFrame:
     """Estimate how much of each candidate cell's trade area the brand already serves.
 
@@ -180,6 +180,9 @@ def compute_cannibalization(
     overlaps an existing store's catchment (the circle-circle "lens" area over
     the circle area): 0 = entirely new territory, 1 = same trade area as an
     existing store. ``nearest_store_km`` is the distance to the closest one.
+
+    The 0.8 km default is a 10-minute walk at ~5 km/h — the usual walk-in
+    trade area for urban coffee/QSR. Drive-to formats need a larger radius.
 
     Real-estate teams typically screen on exactly this — sales transfer from
     an existing store is the main reason a "high-similarity" site

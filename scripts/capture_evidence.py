@@ -306,7 +306,7 @@ def section_app(w: WorkspaceClient, sql: Sql, ctx: dict) -> None:
         "categories": categories,
         "brand_input": {"mode": "brand_name", "value": ctx["brand"]},
         "enable_competition": True, "beta": 1.0,
-        "include_buildings": True, "include_radiance": False, "catchment_km": 1.5,
+        "include_buildings": True, "include_radiance": False, "catchment_km": 0.8,
     }
     t0 = time.time()
     result, steps = None, []
@@ -342,7 +342,7 @@ def section_app(w: WorkspaceClient, sql: Sql, ctx: dict) -> None:
     ctx["session_id"] = sid
     body = (
         f"- **App:** {url}\n- **Request:** brand `{ctx['brand']}` → {ctx['city']}, {ctx['country']} "
-        f"(H3 res 9, competition β=1.0, catchment 1.5 km)\n"
+        f"(H3 res 9, competition β=1.0, catchment 0.8 km)\n"
         f"- **Session:** `{sid}` · **end-to-end time:** {elapsed:.1f}s\n"
         f"- **Hexagons scored:** {len(hexes):,} · existing brand cells: {own:,} · "
         f"candidates with ≥50% cannibalization: {high_cannib:,} ({100 * high_cannib / max(len(cands), 1):.1f}%)\n\n"

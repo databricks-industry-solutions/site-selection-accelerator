@@ -97,7 +97,7 @@ The project scales to zero, so it costs nothing between demos.
 ### 6. Cannibalization reported next to the score, not folded into it
 Sales transfer from the brand's own nearby stores is the most common reason a
 high-similarity site under-delivers. Each candidate gets the distance to its
-nearest own store, and the share of its catchment (1.5 km default) that
+nearest own store, and the share of its catchment (0.8 km default, a 10-minute walk) that
 overlaps that store's catchment, using circle-overlap geometry. I deliberately
 didn't fold this into the opportunity score. A real-estate lead may accept
 some overlap in a dense, high-performing area, and hiding it inside a single
