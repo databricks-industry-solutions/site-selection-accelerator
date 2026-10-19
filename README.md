@@ -5,7 +5,16 @@ identify **whitespace expansion opportunities** for their brand. The app
 discovers existing locations, builds a geospatial profile using **Hex2Vec**
 embeddings from POI and building data, scores every H3 hexagonal cell in a
 target city by neighbourhood similarity, and applies a competition penalty to
-surface areas that best match the brand but are not yet saturated.
+surface areas that best match the brand but are not yet saturated. Each
+candidate also carries a **cannibalization risk** — how much of its trade area
+the brand's own stores already serve — and promising sites can be moved
+through a **shortlist** workflow that the real-estate team works from.
+
+**Built on:** Lakeflow Spark Declarative Pipelines (bronze → silver → gold with
+data-quality expectations) · Unity Catalog · Hex2Vec embeddings (ML) ·
+Genie · Databricks Apps · Lakebase (operational store for live sessions and
+the shortlist). See [`docs/evidence/`](docs/evidence/) for captured run
+output and [`BUILD_NOTES.md`](BUILD_NOTES.md) for the design decisions.
 
 **Use cases:** franchise expansion, competitive gap analysis, new market entry,
 cross-market transfer learning.
@@ -73,9 +82,14 @@ The ETL pipeline reads geospatial data from three free CARTO datasets. You
 
 | # | Search for | Expected Catalog Name | Marketplace Link |
 |---|---|---|---|
-| 1 | CARTO Overture Maps — Places | `carto_overture_maps_places` | [Open listing](https://marketplace.databricks.com/detail/d268c0c5-a7d6-4267-8149-f6eb6359a7e3/CARTO_Overture-Maps-Places) |
-| 2 | CARTO Overture Maps — Divisions | `carto_overture_maps_divisions` | [Open listing](https://marketplace.databricks.com/detail/2ca2de0e-ab6e-4efe-b8a1-3f4e3bfd53d1/CARTO_Overture-Maps-Divisions) |
-| 3 | CARTO Overture Maps — Buildings | `carto_overture_maps_buildings` | [Open listing](https://marketplace.databricks.com/detail/14de3db9-b9d2-4f74-8b20-c440b0e2bd40/CARTO_Overture-Maps-Buildings) |
+| 1 | Overture Maps - Places | `carto_overture_maps_places` | [Open listing](https://marketplace.databricks.com/detail/aca03de7-a670-4e3f-8ee8-b0f319f0a247/Overture-Maps-Places) |
+| 2 | Overture Maps - Divisions | `carto_overture_maps_divisions` | [Open listing](https://marketplace.databricks.com/detail/2b2d3511-55cf-493c-8224-f5c5103a8d74/Overture-Maps-Divisions) |
+| 3 | Overture Maps - Buildings | `carto_overture_maps_buildings` | [Open listing](https://marketplace.databricks.com/detail/ccacdfa3-b85d-4065-bd70-efa673c197e1/Overture-Maps-Buildings) |
+
+> **Shared metastores:** catalog names are unique per metastore, so if the
+> Marketplace says a catalog "already exists" (another workspace installed it
+> under the default name), install under a different name and set the matching
+> `carto_*_catalog` variable.
 
 > **If your workspace uses different catalog names** for these datasets (e.g.
 > your admin renamed them), `setup.sh` will prompt you for the correct names.
@@ -87,9 +101,9 @@ The ETL pipeline reads geospatial data from three free CARTO datasets. You
 ```sql
 -- Each query should return rows. If any fails with "catalog not found",
 -- that listing hasn't been installed yet.
-SELECT COUNT(*) FROM carto_overture_maps_places.carto.overture_places_latest LIMIT 1;
-SELECT COUNT(*) FROM carto_overture_maps_divisions.carto.overture_divisions_latest LIMIT 1;
-SELECT COUNT(*) FROM carto_overture_maps_buildings.carto.overture_buildings_latest LIMIT 1;
+SELECT COUNT(*) FROM carto_overture_maps_places.carto.place;
+SELECT COUNT(*) FROM carto_overture_maps_divisions.carto.division_area;
+SELECT COUNT(*) FROM carto_overture_maps_buildings.carto.building;
 ```
 
 ### 3. Local Tools
@@ -295,10 +309,7 @@ The command prints a URL to the job run. You can monitor progress there.
 | Task | Duration | Description |
 |---|---|---|
 | `setup_schema` | ~5s | Creates `{catalog}.{schema}` if it doesn't exist |
-| `create_gold_cities` | ~1 min | Builds city polygon lookup from CARTO Divisions |
-| `create_gold_places` | ~2 min | Extracts POI coordinates and categories from CARTO Places |
-| `create_gold_buildings` | ~3 min | Extracts building footprints from CARTO Buildings |
-| `create_gold_places_enriched` | ~2 min | Full POI table with brands, addresses, coordinates |
+| `refresh_gold_pipeline` | ~20 min | Runs the **Lakeflow Spark Declarative Pipeline** (`src/pipeline/lakeflow/`): silver + gold materialized views with data-quality expectations — see below |
 | `create_analysis_tables` | ~5s | DDL for the five analysis result tables |
 | `create_gold_radiance` | ~2 min | *(Optional)* Computes mean VIIRS radiance per H3 cell. Skips if VIIRS file not uploaded |
 | `setup_genie_space` | ~30s | Creates Genie Space, grants app service principal access, writes config |
@@ -374,13 +385,32 @@ databricks warehouses set-permissions <warehouse_id> \
 
 ---
 
+### The Lakeflow pipeline
+
+`refresh_gold_pipeline` triggers a serverless SDP pipeline
+(`resources/geospatial_pipeline.yml`). The CARTO Marketplace shares are the
+bronze layer, read zero-copy over Delta Sharing.
+
+| Layer | Dataset | What it does |
+|---|---|---|
+| Silver | `silver_places` | Flattens Overture POIs; maps Overture's `taxonomy` back onto the model's category vocabulary; **drops** rows with no id / invalid coordinates / `permanently_closed`; **tracks** low confidence and missing addresses |
+| Silver | `silver_buildings` | Centroid + H3 res-9 cell per building; **drops** rows with no id / centroid / cell; **tracks** implausible heights |
+| Gold | `gold_places`, `gold_places_enriched`, `gold_buildings` | The column contracts the app, Hex2Vec training and Genie read; liquid-clustered on bbox |
+| Gold | `gold_cities` | City footprint + population; `polygon_source` records whether the polygon came from Overture, an admin-area union, or a population-scaled fallback |
+
+Expectation results land in the pipeline event log — query them with
+`SELECT * FROM event_log('<pipeline_id>')`, or see
+[`docs/evidence/02_pipeline_data_quality.md`](docs/evidence/02_pipeline_data_quality.md).
+
 ## What You Get
 
 | Asset | Description |
 |---|---|
 | **Databricks App** | Interactive full-stack app (React + FastAPI) for running brand site analysis |
-| **ETL Pipeline** | DABs job that builds gold tables from CARTO Overture Maps and trains the Hex2Vec model |
-| **Gold Tables** | `gold_cities`, `gold_places`, `gold_buildings`, `gold_places_enriched`, `gold_radiance` (optional) in Unity Catalog |
+| **ETL Job** | Lakeflow Job that refreshes the pipeline, sets up Genie and trains the Hex2Vec model |
+| **Lakeflow Pipeline** | Serverless Spark Declarative Pipeline: Overture → silver → gold with data-quality expectations |
+| **Silver/Gold Tables** | `silver_places`, `silver_buildings`, `gold_cities`, `gold_places`, `gold_buildings`, `gold_places_enriched`, `gold_radiance` (optional) in Unity Catalog |
+| **Lakebase** | Postgres project (`site-selection-<target>`, scale-to-zero) holding live analysis sessions and the site shortlist |
 | **Analysis Tables** | `analyses`, `analysis_hexagons`, `analysis_brand_profiles`, `analysis_fingerprints`, `analysis_competitors` — every analysis run persisted to Delta |
 | **Hex2Vec Model** | Multi-city pretrained geospatial embedding model stored in a UC Volume |
 | **Genie Space** | Natural-language SQL exploration over both the base data and your analysis results |
@@ -423,6 +453,28 @@ persists all outputs to five Delta tables, each keyed by a unique
 The Genie Space includes these tables, so you can ask questions like
 *"Show me the top 10 hexagons by similarity for Starbucks in London"* in
 natural language.
+
+### Cannibalization and the Shortlist
+
+Every candidate cell is scored for **cannibalization risk**: the fraction of
+its catchment (default 1.5 km radius, `catchment_km` in the API) that overlaps
+the catchment of the brand's nearest existing store, plus the distance to that
+store. It appears in the hover tooltip and the hexagon panel. It is reported
+next to the opportunity score rather than folded into it, so you can see the
+trade-off between a strong match and sales transfer from your own stores.
+
+Click **Add to shortlist** in the hexagon panel to save a site. The
+**Shortlist** button (bottom-right) lists your sites with their scores. Each
+one has a status (Candidate → Site visit → Negotiating / Rejected) and notes.
+The shortlist is stored in **Lakebase**, scoped to the signed-in user.
+
+### Sessions survive restarts (Lakebase)
+
+Each analysis is written through to Lakebase as it completes
+(`site_selection.sessions` + `site_selection.session_hexagons`). The
+in-process cache is only a hot copy. If the app restarts, or a request lands on
+another instance, hexagon drill-downs reload from Lakebase. **Save Analysis**
+still writes the Delta tables below, which Genie and historical analysis use.
 
 ### Accessing All Assets
 
@@ -477,15 +529,17 @@ links to:
   │ Hex2Vec model   │  │ tables          │  │                  │
   └────────────────┘  └─────────────────┘  └──────────────────┘
           ▲
-  ┌────────────────┐
-  │ ETL Job (DABs) │
-  │                │
-  │ CARTO Overture │
-  │ → gold tables  │
-  │ → analysis DDL │
-  │ → Genie Space  │
-  │ → Hex2Vec      │
-  └────────────────┘
+  ┌─────────────────────────────┐      ┌──────────────────────────┐
+  │ ETL Job (Lakeflow Jobs)     │      │ Lakebase (Postgres)      │
+  │                             │      │                          │
+  │ Lakeflow SDP pipeline:      │      │ sessions                 │
+  │  Overture share (bronze)    │      │ session_hexagons         │
+  │  → silver_* (expectations)  │      │ shortlist                │
+  │  → gold_*                   │      │  ▲ read/write from app   │
+  │ → analysis DDL              │      └──────────────────────────┘
+  │ → Genie Space               │
+  │ → Hex2Vec training          │
+  └─────────────────────────────┘
 ```
 
 ---
@@ -498,8 +552,10 @@ site-selection-accelerator/
 ├── setup.sh                             # Interactive configuration script
 ├── pyproject.toml                        # Root uv workspace
 ├── resources/
-│   ├── site_selection_app.yml            # Databricks App resource
-│   ├── geospatial_etl_job.yml           # ETL job (SQL + Python tasks)
+│   ├── site_selection_app.yml            # Databricks App resource (+ Lakebase binding)
+│   ├── geospatial_etl_job.yml           # ETL job (pipeline + Python tasks)
+│   ├── geospatial_pipeline.yml          # Lakeflow Spark Declarative Pipeline
+│   ├── lakebase.yml                     # Lakebase Postgres project
 │   └── radiance_on_demand_job.yml       # On-demand radiance job
 ├── packages/app/                         # Full-stack application (apx)
 │   ├── app.yml                           # App runtime config (env vars)
@@ -510,7 +566,7 @@ site-selection-accelerator/
 │       │   ├── app.py                    # FastAPI entry point
 │       │   ├── router.py                 # API routes
 │       │   ├── models.py                 # Pydantic models
-│       │   └── cache.py                  # In-memory session cache
+│       │   └── cache.py                  # Session cache (memory, backed by Lakebase)
 │       └── ui/
 │           ├── routes/index.tsx          # Main page
 │           ├── components/
@@ -532,18 +588,21 @@ site-selection-accelerator/
     │   ├── similarity.py                 # Cosine similarity + opportunity scoring
     │   ├── brand_search.py               # Genie brand discovery + competition
     │   ├── explainability.py             # Score explanations + LLM insights
+    │   ├── lakebase.py                   # Lakebase sessions + shortlist (Postgres)
     │   └── persist.py                    # Delta table persistence
     └── pipeline/
         ├── setup_genie_space.py          # Genie Space provisioning
         ├── train_hex2vec.py              # Multi-city Hex2Vec training
+        ├── lakeflow/                     # Spark Declarative Pipeline (SQL)
+        │   ├── silver/                   # silver_places, silver_buildings
+        │   └── gold/                     # gold_cities, gold_places, gold_buildings, gold_places_enriched
         └── transformations/
-            ├── setup_schema.sql
-            ├── gold_cities.sql
-            ├── gold_places.sql
-            ├── gold_buildings.sql
-            ├── gold_places_enriched.sql
+            ├── setup_schema.py
+            ├── analysis_tables.py        # Analysis result DDL
             ├── create_gold_radiance.py   # VIIRS radiance ETL (optional)
-            └── analysis_tables.sql       # Analysis result DDL
+            └── compute_city_radiance.py  # On-demand radiance job
+scripts/capture_evidence.py               # Writes docs/evidence/ from a live deployment
+docs/evidence/                            # Captured run output (job, pipeline DQ, Genie, app, Lakebase)
 ```
 
 ---
