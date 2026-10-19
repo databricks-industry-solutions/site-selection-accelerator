@@ -133,8 +133,15 @@ def find_pipeline(w: WorkspaceClient, suffix: str):
 
 def section_job(w: WorkspaceClient, ctx: dict) -> None:
     job = find_job(w, ETL_JOB_SUFFIX)
-    runs = list(w.jobs.list_runs(job_id=job.job_id, limit=5, expand_tasks=True))
-    done = [r for r in runs if r.state and r.state.result_state is not None]
+    runs = list(w.jobs.list_runs(job_id=job.job_id, limit=25, expand_tasks=True))
+    # Latest *full* run — skip partial runs (`bundle run --only ...`), whose
+    # unselected tasks report DISABLED.
+    done = [
+        r for r in runs
+        if r.state and r.state.result_state is not None
+        and not any(t.state and t.state.result_state and t.state.result_state.value == "DISABLED"
+                    for t in (r.tasks or []))
+    ]
     if not done:
         raise RuntimeError("ETL job has no finished runs yet")
     run = w.jobs.get_run(done[0].run_id)
@@ -259,7 +266,9 @@ def section_model(w: WorkspaceClient, sql: Sql, ctx: dict) -> None:
         "\n## Training metadata (`hex2vec_metadata.json`)\n\n"
         f"- **Cities:** {len(meta['cities'])} — {cities}\n"
         f"- **H3 resolution:** {meta['resolution']}\n"
-        f"- **Regions (H3 cells):** {meta['num_regions']:,}\n"
+        f"- **Regions (H3 cells with ≥1 feature):** {meta['num_regions']:,}"
+        + (f" of {meta['num_city_cells']:,} cells covering the training cities\n"
+           if "num_city_cells" in meta else "\n") +
         f"- **Features (POIs + buildings):** {meta['num_features']:,}\n"
         f"- **Feature categories:** {len(meta['categories'])}\n"
         f"- **Encoder sizes:** {meta['encoder_sizes']} · **max epochs:** {meta['max_epochs']} · "
@@ -353,12 +362,18 @@ def section_app(w: WorkspaceClient, sql: Sql, ctx: dict) -> None:
     if len(top) > 1:
         s.post(f"{url}/api/shortlist", json={"session_id": sid, "hex_id": top[1]["hex_id"]}, timeout=60)
     shortlist = s.get(f"{url}/api/shortlist", params={"session_id": sid}, timeout=60).json()
+    # "Save Analysis": writes the run to the Delta analysis_* tables Genie reads.
+    saved = s.post(f"{url}/api/results/{sid}/persist-with-context", json=req, timeout=900)
+    saved.raise_for_status()
+    saved = saved.json()
 
     ctx["session_id"] = sid
     body = (
         f"- **App:** {url}\n- **Request:** brand `{ctx['brand']}` → {ctx['city']}, {ctx['country']} "
         f"(H3 res 9, competition β=1.0, catchment 0.8 km)\n"
         f"- **Session:** `{sid}` · **end-to-end time:** {elapsed:.1f}s\n"
+        f"- **Saved to Delta:** analysis_id `{saved['analysis_id']}` → "
+        f"{', '.join(saved['tables_written'])}\n"
         f"- **Hexagons scored:** {len(hexes):,} · existing brand cells: {own:,} · "
         f"candidates with ≥50% cannibalization: {high_cannib:,} ({100 * high_cannib / max(len(cands), 1):.1f}%)\n\n"
         "## Progress stream (SSE)\n\n```\n" + "\n".join(steps) + "\n```\n"
@@ -424,7 +439,8 @@ def section_lakebase(w: WorkspaceClient, sql: Sql, ctx: dict) -> None:
 
 SECTIONS = {
     "job": section_job, "pipeline": section_pipeline, "tables": section_tables,
-    "model": section_model, "genie": section_genie, "app": section_app, "lakebase": section_lakebase,
+    # app runs before genie so Genie can query the analysis it just saved
+    "model": section_model, "app": section_app, "lakebase": section_lakebase, "genie": section_genie,
 }
 
 

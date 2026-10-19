@@ -321,6 +321,11 @@ def _persist_hexagons(analysis_id: str, pr: PipelineResult) -> None:
         if col not in scored.columns:
             scored[col] = np.nan
 
+    # Match the INT columns in the Delta table: pandas defaults to int64,
+    # which COPY INTO cannot merge into INT (DELTA_FAILED_TO_MERGE_FIELDS).
+    scored["poi_count"] = scored["poi_count"].astype("int32")
+    scored["competitor_count"] = scored["competitor_count"].astype("int32")
+
     out = scored[
         ["analysis_id", "h3_cell", "hex_id", "similarity", "opportunity_score",
          "is_brand_cell", "lat", "lon", "address", "poi_count",

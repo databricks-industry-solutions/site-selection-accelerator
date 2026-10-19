@@ -1,6 +1,6 @@
 # Lakeflow Declarative Pipeline — run and data quality
 
-_Captured 2026-10-19 15:35:07 UTC by `scripts/capture_evidence.py`._
+_Captured 2026-10-19 15:43:10 UTC by `scripts/capture_evidence.py`._
 
 - **Pipeline:** `[dev dilshad_shawki] [dev] Site Selection - Overture Medallion Pipeline` (`6280cf95-c3ce-4d8c-8e6c-d3bea041965c`), serverless, triggered by the ETL job
 - **Update:** `13591cf0-71b3-401c-9d3c-179d820176d5` · 2026-10-19T15:29:34.327Z → 2026-10-19T15:30:12.383Z

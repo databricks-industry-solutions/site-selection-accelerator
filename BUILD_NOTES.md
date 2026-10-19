@@ -103,6 +103,27 @@ didn't fold this into the opportunity score. A real-estate lead may accept
 some overlap in a dense, high-performing area, and hiding it inside a single
 number would take that judgement away from them.
 
+### 7. What running it end-to-end with captured evidence surfaced
+Running the whole build from a fresh deployment and writing the outputs to
+[`docs/evidence/`](docs/evidence/) caught four defects that had been invisible
+while the code only existed as notebooks:
+- **Hex2Vec was training on ~2% of its data.** The training notebook fetched
+  results inline (capped at 25 MiB, silently truncated), and pulled POIs and
+  buildings with one bounding box spanning every training city from San
+  Francisco to Astana. The model saw 4,139 cells and 44k features. It now
+  fetches via `EXTERNAL_LINKS` + Arrow, filters to the cities' H3 cells in the
+  warehouse, and fails if a result is ever truncated. It now trains on
+  **106,365 cells and 5.0M features**.
+- **Dependency drift:** `srai` uses a Polars argument removed in Polars 2.0,
+  so training and in-app embedding broke on fresh installs. Pinned
+  `polars<2`.
+- **"Save Analysis" only ever wrote one of five tables.** The staging volume
+  was never created, and `poi_count`/`competitor_count` were written as int64
+  into `INT` columns. Both are fixed, and the volume grants are now explicit.
+- **Genie ranked existing stores as "opportunities".** Its instructions now
+  exclude `is_brand_cell` rows and explain the cannibalization columns. Its
+  top 10 now matches the app's top 10 for the same analysis.
+
 ## How this was built (and where AI helped)
 
 > **TODO (Dilshad):** rewrite this section in your own words. It's the part

@@ -370,6 +370,8 @@ GRANT USE CATALOG ON CATALOG `<catalog>` TO `<sp_name>`;
 GRANT USE SCHEMA ON SCHEMA `<catalog>`.`<schema>` TO `<sp_name>`;
 GRANT SELECT ON SCHEMA `<catalog>`.`<schema>` TO `<sp_name>`;
 GRANT MODIFY ON SCHEMA `<catalog>`.`<schema>` TO `<sp_name>`;
+GRANT READ VOLUME ON SCHEMA `<catalog>`.`<schema>` TO `<sp_name>`;   -- Hex2Vec model
+GRANT WRITE VOLUME ON SCHEMA `<catalog>`.`<schema>` TO `<sp_name>`;  -- Save Analysis staging (tmp)
 ```
 
 For the SQL warehouse (run in terminal):

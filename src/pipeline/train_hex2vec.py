@@ -41,6 +41,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import geopandas as gpd
+import pyarrow as pa
+import requests
 import h3
 import numpy as np
 import pandas as pd
@@ -127,6 +129,13 @@ METADATA_FILENAME = "hex2vec_metadata.json"
 
 # COMMAND ----------
 
+def _download_arrow_chunk(link) -> pa.Table:
+    # Pre-signed cloud-storage URL: must NOT carry the Databricks auth header.
+    resp = requests.get(link.external_link, timeout=300)
+    resp.raise_for_status()
+    return pa.ipc.open_stream(resp.content).read_all()
+
+
 def _execute_sql(
     client: WorkspaceClient,
     warehouse_id: str,
@@ -134,16 +143,21 @@ def _execute_sql(
     catalog: str | None = None,
     schema: str | None = None,
 ) -> pd.DataFrame:
-    """Execute a SQL statement and return a DataFrame."""
+    """Execute a SQL statement and return a DataFrame.
+
+    Uses EXTERNAL_LINKS + ARROW_STREAM (same as the app's db.py). The
+    previous INLINE/JSON fetch silently capped results at 25 MiB, which
+    truncated the multi-city POI/building pull to ~2% of the training
+    cells. A truncated result now fails the task instead.
+    """
     resp = client.statement_execution.execute_statement(
         statement=query,
         warehouse_id=warehouse_id,
         catalog=catalog,
         schema=schema,
         wait_timeout="50s",
-        disposition=Disposition.INLINE,
-        format=Format.JSON_ARRAY,
-        byte_limit=26214400,
+        disposition=Disposition.EXTERNAL_LINKS,
+        format=Format.ARROW_STREAM,
     )
 
     state = resp.status.state if resp.status else None
@@ -165,38 +179,21 @@ def _execute_sql(
     if resp.manifest is None or resp.result is None:
         return pd.DataFrame()
 
-    col_schemas = resp.manifest.schema.columns
-    columns = [col.name for col in col_schemas]
-    all_rows = list(resp.result.data_array or [])
-
+    tables = [_download_arrow_chunk(l) for l in (resp.result.external_links or [])]
     total_chunks = resp.manifest.total_chunk_count or 1
-    if total_chunks > 1:
-        for chunk_idx in range(1, total_chunks):
-            chunk = client.statement_execution.get_statement_result_chunk_n(
-                statement_id=resp.statement_id, chunk_index=chunk_idx,
-            )
-            if chunk.data_array:
-                all_rows.extend(chunk.data_array)
+    for chunk_idx in range(1, total_chunks):
+        chunk = client.statement_execution.get_statement_result_chunk_n(
+            statement_id=resp.statement_id, chunk_index=chunk_idx,
+        )
+        tables.extend(_download_arrow_chunk(l) for l in (chunk.external_links or []))
 
-    df = pd.DataFrame(all_rows, columns=columns)
-    for col_schema in col_schemas:
-        col_name = col_schema.name
-        type_text = (col_schema.type_text or "").upper()
-        if col_name not in df.columns or df[col_name].empty:
-            continue
-        try:
-            if "BIGINT" in type_text or "LONG" in type_text:
-                df[col_name] = df[col_name].apply(
-                    lambda v: int(v) if v is not None else None
-                )
-                df[col_name] = df[col_name].astype("Int64")
-            elif "INT" in type_text:
-                df[col_name] = pd.to_numeric(df[col_name], errors="coerce").astype("Int64")
-            elif "DOUBLE" in type_text or "FLOAT" in type_text or "DECIMAL" in type_text:
-                df[col_name] = pd.to_numeric(df[col_name], errors="coerce")
-        except Exception:
-            pass
-
+    df = pa.concat_tables(tables).to_pandas() if tables else pd.DataFrame(
+        columns=[c.name for c in resp.manifest.schema.columns]
+    )
+    if resp.manifest.truncated:
+        raise RuntimeError(
+            f"SQL result truncated: {len(df)} of {resp.manifest.total_row_count} rows"
+        )
     log.info("SQL returned %d rows (%d chunks)", len(df), total_chunks)
     return df
 
@@ -232,6 +229,22 @@ def validate_cities(
     return found, missing
 
 
+def _city_cells_cte(
+    catalog: str, schema: str, city_specs: list[tuple[str, str]], resolution: int,
+) -> str:
+    """CTE `cells` = distinct H3 cells covering every training city."""
+    values = ", ".join(
+        "('{}', '{}')".format(c, n.replace("'", "''")) for c, n in city_specs
+    )
+    return f"""
+        training_cities(country, city_name) AS (VALUES {values}),
+        cells AS (
+            SELECT DISTINCT explode(h3_polyfillash3(g.geom_wkt, {resolution})) AS h3_cell
+            FROM {catalog}.{schema}.gold_cities g
+            JOIN training_cities t USING (country, city_name)
+        )"""
+
+
 def tessellate_cities(
     client: WorkspaceClient,
     warehouse_id: str,
@@ -241,23 +254,13 @@ def tessellate_cities(
     resolution: int,
 ) -> pd.DataFrame:
     """H3-tessellate multiple cities and return the deduplicated union."""
-    cities_table = f"{catalog}.{schema}.gold_cities"
-    union_parts = []
-    for country, city in city_specs:
-        union_parts.append(f"""
-            SELECT explode(h3_polyfillash3(geom_wkt, {resolution})) AS h3_cell
-            FROM {cities_table}
-            WHERE country = '{country}' AND city_name = '{city}'
-        """)
-
-    union_sql = " UNION ".join(union_parts)
     query = f"""
-        WITH all_cells AS ({union_sql})
-        SELECT DISTINCT
+        WITH {_city_cells_cte(catalog, schema, city_specs, resolution)}
+        SELECT
             h3_cell,
             CAST(h3_centerasgeojson(h3_cell):coordinates[1] AS DOUBLE) AS center_lat,
             CAST(h3_centerasgeojson(h3_cell):coordinates[0] AS DOUBLE) AS center_lon
-        FROM all_cells
+        FROM cells
     """
     return _execute_sql(client, warehouse_id, query)
 
@@ -267,34 +270,25 @@ def fetch_pois(
     warehouse_id: str,
     catalog: str,
     schema: str,
-    h3_cells_df: pd.DataFrame,
+    city_specs: list[tuple[str, str]],
     resolution: int,
     categories: list[str],
 ) -> pd.DataFrame:
-    """Fetch POIs that fall within the training H3 cells."""
-    places_table = f"{catalog}.{schema}.gold_places"
-    cell_set = set(h3_cells_df["h3_cell"].tolist())
+    """Fetch POIs that fall within the training cities' H3 cells.
 
-    lat_min = h3_cells_df["center_lat"].min() - 0.05
-    lat_max = h3_cells_df["center_lat"].max() + 0.05
-    lon_min = h3_cells_df["center_lon"].min() - 0.05
-    lon_max = h3_cells_df["center_lon"].max() + 0.05
-
+    The cell filter runs in the warehouse: one bounding box spanning all
+    training cities (San Francisco to Astana) would pull most of the
+    planet's POIs to the driver.
+    """
     cat_list = ", ".join(f"'{c}'" for c in categories)
     query = f"""
-        SELECT
-            poi_id,
-            category,
-            lon,
-            lat,
-            h3_longlatash3(lon, lat, {resolution}) AS h3_cell
-        FROM {places_table}
-        WHERE lon BETWEEN {lon_min} AND {lon_max}
-          AND lat BETWEEN {lat_min} AND {lat_max}
-          AND category IN ({cat_list})
+        WITH {_city_cells_cte(catalog, schema, city_specs, resolution)}
+        SELECT p.poi_id, p.category, p.lon, p.lat, c.h3_cell
+        FROM {catalog}.{schema}.gold_places p
+        JOIN cells c ON h3_longlatash3(p.lon, p.lat, {resolution}) = c.h3_cell
+        WHERE p.category IN ({cat_list})
     """
-    pois_df = _execute_sql(client, warehouse_id, query)
-    return pois_df[pois_df["h3_cell"].isin(cell_set)].reset_index(drop=True)
+    return _execute_sql(client, warehouse_id, query)
 
 
 def fetch_buildings(
@@ -302,31 +296,17 @@ def fetch_buildings(
     warehouse_id: str,
     catalog: str,
     schema: str,
-    h3_cells_df: pd.DataFrame,
+    city_specs: list[tuple[str, str]],
+    resolution: int,
 ) -> pd.DataFrame:
-    """Fetch buildings that fall within the training H3 cells."""
-    buildings_table = f"{catalog}.{schema}.gold_buildings"
-    cell_set = set(h3_cells_df["h3_cell"].tolist())
-
-    lat_min = h3_cells_df["center_lat"].min() - 0.05
-    lat_max = h3_cells_df["center_lat"].max() + 0.05
-    lon_min = h3_cells_df["center_lon"].min() - 0.05
-    lon_max = h3_cells_df["center_lon"].max() + 0.05
-
+    """Fetch buildings that fall within the training cities' H3 cells."""
     query = f"""
-        SELECT
-            building_id,
-            building_category,
-            height_bin,
-            lon,
-            lat,
-            h3_cell
-        FROM {buildings_table}
-        WHERE lon BETWEEN {lon_min} AND {lon_max}
-          AND lat BETWEEN {lat_min} AND {lat_max}
+        WITH {_city_cells_cte(catalog, schema, city_specs, resolution)}
+        SELECT b.building_id, b.building_category, b.height_bin, b.lon, b.lat, b.h3_cell
+        FROM {catalog}.{schema}.gold_buildings b
+        JOIN cells c ON b.h3_cell = c.h3_cell
     """
-    bldg_df = _execute_sql(client, warehouse_id, query)
-    return bldg_df[bldg_df["h3_cell"].isin(cell_set)].reset_index(drop=True)
+    return _execute_sql(client, warehouse_id, query)
 
 # COMMAND ----------
 
@@ -336,7 +316,7 @@ def fetch_buildings(
 # COMMAND ----------
 
 def _int_to_hex(cell_id: int) -> str:
-    return h3.int_to_str(cell_id)
+    return h3.int_to_str(int(cell_id))
 
 
 def _h3_hex_to_polygon(hex_id: str) -> Polygon:
@@ -452,7 +432,7 @@ def main(catalog: str, schema: str, warehouse_id: str) -> str:
     log.info("Fetching POIs for %d categories…", len(POI_CATEGORIES))
     pois_df = fetch_pois(
         client, warehouse_id, catalog, schema,
-        h3_cells_df, H3_RESOLUTION, POI_CATEGORIES,
+        found, H3_RESOLUTION, POI_CATEGORIES,
     )
     log.info("POIs fetched: %d", len(pois_df))
 
@@ -461,7 +441,7 @@ def main(catalog: str, schema: str, warehouse_id: str) -> str:
 
     log.info("Fetching buildings…")
     bldg_df = fetch_buildings(
-        client, warehouse_id, catalog, schema, h3_cells_df,
+        client, warehouse_id, catalog, schema, found, H3_RESOLUTION,
     )
     log.info("Buildings fetched: %d", len(bldg_df))
 
@@ -523,6 +503,7 @@ def main(catalog: str, schema: str, warehouse_id: str) -> str:
             "batch_size": BATCH_SIZE,
             "cities": [list(c) for c in found],
             "num_regions": len(regions_gdf),
+            "num_city_cells": len(h3_cells_df),
             "num_features": len(features_gdf),
             "saved_at": datetime.now(timezone.utc).isoformat(),
         }

@@ -1,6 +1,6 @@
 # Governed silver/gold tables in Unity Catalog
 
-_Captured 2026-10-19 15:35:13 UTC by `scripts/capture_evidence.py`._
+_Captured 2026-10-19 15:43:13 UTC by `scripts/capture_evidence.py`._
 
 ## Row counts
 
@@ -26,11 +26,11 @@ _Captured 2026-10-19 15:35:13 UTC by `scripts/capture_evidence.py`._
 
 | country | city_name | population | polygon_source | has_polygon | center_lat | center_lon |
 |---|---|---|---|---|---|---|
-| GB | London | 8,908,083 | population_buffer | 0 | 51.5074 | -0.1278 |
-| US | New York | 8,467,513 | locality | 1 | 40.7127 | -74.006 |
-| DE | Berlin | 3,769,962 | admin_union | 1 | 52.5174 | 13.3951 |
-| FR | Paris | 2,133,111 | locality | 1 | 48.8535 | 2.3484 |
-| SE | Stockholm | 984,748 | population_buffer | 0 | 59.3251 | 18.0711 |
+| GB | London | 8,908,083 | population_buffer | false | 51.5074 | -0.1278 |
+| US | New York | 8,467,513 | locality | true | 40.7127 | -74.006 |
+| DE | Berlin | 3,769,962 | admin_union | true | 52.5174 | 13.3951 |
+| FR | Paris | 2,133,111 | locality | true | 48.8535 | 2.3484 |
+| SE | Stockholm | 984,748 | population_buffer | false | 59.3251 | 18.0711 |
 
 ## Top model categories in `gold_places`
 

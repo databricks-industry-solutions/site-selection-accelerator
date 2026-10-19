@@ -201,7 +201,23 @@ def _build_serialized_space(catalog: str, schema: str, existing_tables: set[str]
                         f"{catalog}.{schema}.analyses a ON "
                         "a.analysis_id = h.analysis_id WHERE "
                         "a.brand_input_value ILIKE '%Starbucks%' "
+                        "AND NOT h.is_brand_cell "
                         "ORDER BY h.similarity DESC LIMIT 10\n",
+                        "\n",
+                        "CANDIDATE SITES vs EXISTING STORES — rows with "
+                        "is_brand_cell = true are the brand's EXISTING "
+                        "locations, not opportunities. Whenever the user "
+                        "asks for opportunities, candidate sites, whitespace "
+                        "or 'top hexagons', filter NOT is_brand_cell.\n",
+                        "CANNIBALIZATION — analysis_hexagons."
+                        "cannibalization_risk (0–1) is the share of a "
+                        "candidate's walk-in catchment (default 0.8 km) "
+                        "already covered by the brand's nearest existing "
+                        "store; nearest_store_km is the distance to it. "
+                        "Treat cannibalization_risk >= 0.5 as high. When "
+                        "ranking opportunities, show cannibalization_risk "
+                        "and nearest_store_km alongside opportunity_score "
+                        "rather than silently filtering on them.\n",
                         "\n",
                         "RADIANCE DATA:\n",
                         f"  {catalog}.{schema}.gold_radiance — VIIRS "
@@ -421,7 +437,7 @@ def _grant_app_sp_schema_access(
     warehouse_id: str,
     app_name: str = "site-selection-accelerator",
 ) -> None:
-    """Grant the app service principal USE CATALOG, USE SCHEMA, and SELECT on the schema."""
+    """Grant the app service principal catalog/schema access plus volume read/write."""
     from databricks.sdk.service.sql import StatementState
 
     try:
@@ -442,6 +458,9 @@ def _grant_app_sp_schema_access(
             f"GRANT USE SCHEMA ON SCHEMA `{catalog}`.`{schema}` TO `{sp_display_name}`",
             f"GRANT SELECT ON SCHEMA `{catalog}`.`{schema}` TO `{sp_display_name}`",
             f"GRANT MODIFY ON SCHEMA `{catalog}`.`{schema}` TO `{sp_display_name}`",
+            # Model volume (read) and the Save Analysis staging volume (write)
+            f"GRANT READ VOLUME ON SCHEMA `{catalog}`.`{schema}` TO `{sp_display_name}`",
+            f"GRANT WRITE VOLUME ON SCHEMA `{catalog}`.`{schema}` TO `{sp_display_name}`",
         ]
         for stmt in grants:
             resp = w.statement_execution.execute_statement(

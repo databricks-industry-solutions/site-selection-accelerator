@@ -100,3 +100,14 @@ print(f"Schema:  {schema}")
 # MAGIC     brand       STRING,
 # MAGIC     address     STRING
 # MAGIC ) USING DELTA
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC Staging volume for "Save Analysis": the app uploads each result set as
+# MAGIC Parquet here, then `COPY INTO`s the Delta tables above.
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC CREATE VOLUME IF NOT EXISTS IDENTIFIER('${catalog}' || '.' || '${schema}' || '.tmp')
