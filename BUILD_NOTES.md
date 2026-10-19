@@ -125,15 +125,8 @@ while the code only existed as notebooks:
   top 10 now matches the app's top 10 for the same analysis.
 
 ## How this was built (and where AI helped)
+- **v1 (original accelerator):** built with Cursor. I used the apx framework to create the scaffold first and make sure that the look and feel of the app was of high quality. I also studied a paper on Hex2Vec and understood it's methodology and I recreated this myself, in other words, I trained a neural network which was the hex2vec embedder and it was pre-trained on POIs and cities from the paper so it would be reflective of what papers findings and conclusions that this model can differentiate between different regions. I also used Cursor to build additional features like saving the analysis into to tables but also using a genie space and assets button to access that genie space from the app.
 
-> **TODO (Dilshad):** rewrite this section in your own words. It's the part
-> the grader reads most closely for "Build + AI Mindset". Keep it specific:
-> which steps you did by hand, which you delegated to an assistant, and where
-> you overrode its suggestions.
-
-- **v1 (original accelerator):** built with Cursor. *(Describe your workflow:
-  e.g. how you scaffolded the apx app, iterated on the Genie instructions, and
-  validated Hex2Vec against the paper.)*
 - **v2 (this revision):** I used Claude Code as a pair programmer against the
   live workspace. I set the scope from the FE Bar feedback: Lakeflow, Lakebase,
   evidence, industry framing. The assistant ported the SQL into the pipeline,
