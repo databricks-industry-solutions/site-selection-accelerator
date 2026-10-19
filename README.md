@@ -491,6 +491,8 @@ links to:
 
 ## Architecture
 
+![Architecture](docs/architecture.png)
+
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
 │                        Databricks App (apx)                              │

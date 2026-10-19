@@ -66,6 +66,8 @@ def md_table(rows: list[dict], cols: list[str] | None = None) -> str:
 def _cell(v) -> str:
     if v is None:
         return "—"
+    if isinstance(v, bool):
+        return "true" if v else "false"
     if isinstance(v, float):
         return f"{v:,.4f}".rstrip("0").rstrip(".")
     if isinstance(v, int):
@@ -109,7 +111,7 @@ def _coerce(v, t):
     if t in ("DOUBLE", "FLOAT", "DECIMAL"):
         return float(v)
     if t == "BOOLEAN":
-        return v == "true"
+        return str(v).lower() in ("true", "1")
     return v
 
 
@@ -160,11 +162,23 @@ def section_job(w: WorkspaceClient, ctx: dict) -> None:
 def section_pipeline(w: WorkspaceClient, sql: Sql, ctx: dict) -> None:
     p = find_pipeline(w, PIPELINE_SUFFIX)
     pid = p.pipeline_id
+    # Latest update that actually recomputed data: when the Overture share is
+    # unchanged, materialized views are skipped and log no quality metrics.
     upd = sql.rows(
         f"""SELECT origin.update_id AS update_id, MIN(timestamp) AS started, MAX(timestamp) AS ended
-            FROM event_log('{pid}') WHERE event_type = 'update_progress'
-              AND details:update_progress:state = 'COMPLETED'
+            FROM event_log('{pid}')
+            WHERE origin.update_id IN (
+                SELECT origin.update_id FROM event_log('{pid}')
+                WHERE event_type = 'flow_progress'
+                  AND details:flow_progress:data_quality IS NOT NULL)
             GROUP BY 1 ORDER BY ended DESC LIMIT 1"""
+    )
+    all_updates = sql.rows(
+        f"""SELECT origin.update_id AS update_id, MIN(timestamp) AS started,
+                   MAX(timestamp) AS ended,
+                   MAX_BY(details:update_progress:state, timestamp) AS state
+            FROM event_log('{pid}') WHERE event_type = 'update_progress'
+            GROUP BY 1 ORDER BY started DESC LIMIT 5"""
     )
     if not upd:
         raise RuntimeError("Pipeline has no completed update yet")
@@ -195,7 +209,8 @@ def section_pipeline(w: WorkspaceClient, sql: Sql, ctx: dict) -> None:
         f"- **Update:** `{uid}` · {upd[0]['started']} → {upd[0]['ended']}\n\n"
         "Bronze is the CARTO Overture Marketplace share (read zero-copy over Delta Sharing); "
         "silver and gold are materialized views defined in `src/pipeline/lakeflow/`.\n\n"
-        "## Datasets refreshed\n\n" + md_table(flows) +
+        "## Recent pipeline updates\n\n" + md_table(all_updates) +
+        "\n## Datasets refreshed (update above)\n\n" + md_table(flows) +
         "\n## Data-quality expectations\n\n"
         "`DROP ROW` expectations remove the row; the others are warn-only and are tracked so "
         "drift in Overture's data shows up in the event log.\n\n" + md_table(exp)
