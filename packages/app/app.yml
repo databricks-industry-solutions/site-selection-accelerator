@@ -7,6 +7,10 @@ env:
     valueFrom: radiance-job
   - name: ETL_JOB_ID
     valueFrom: etl-job
+  # Lakebase: PG* vars are injected automatically for the postgres resource;
+  # the endpoint path (needed to mint OAuth DB credentials) must be mapped.
+  - name: LAKEBASE_ENDPOINT
+    valueFrom: lakebase
   # IMPORTANT: these must match the catalog and schema in databricks.yml
   - name: GOLD_CATALOG
     value: "CHANGE_ME"

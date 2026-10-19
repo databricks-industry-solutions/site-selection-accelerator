@@ -68,6 +68,9 @@ resources:
                 package: "databricks-sdk>=0.65.0"
             - pypi:
                 package: "srai[torch]>=0.8.0"
+            # srai calls LazyFrame.collect(streaming=...), removed in polars 2.0
+            - pypi:
+                package: "polars>=1.25,<2"
             - pypi:
                 package: "geopandas"
             - pypi:
