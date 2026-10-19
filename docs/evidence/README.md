@@ -15,3 +15,7 @@ against your own deployment to regenerate it.
 | [05_genie_agent.md](05_genie_agent.md) | Genie Agent answering natural-language questions, with the SQL it generated and the results |
 | [06_app_analysis.md](06_app_analysis.md) | A live app analysis (Pret A Manger → London): progress stream, top sites with cannibalization, drill-down, shortlist, Save Analysis |
 | [07_lakebase.md](07_lakebase.md) | Lakebase rows written by the app: sessions, scored hexagons, shortlist |
+
+![App: London, Pret A Manger — hexagon panel with cannibalization and Add to shortlist](app-london-cannibalization.png)
+
+_Live app screenshot: a London candidate site at 58% cannibalization, 0.5 km from the nearest existing Pret._
