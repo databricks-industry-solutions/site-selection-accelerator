@@ -1,6 +1,6 @@
 # Governed silver/gold tables in Unity Catalog
 
-_Captured 2026-10-19 15:43:13 UTC by `scripts/capture_evidence.py`._
+_Captured 2026-10-19 17:00:14 UTC by `scripts/capture_evidence.py`._
 
 ## Row counts
 

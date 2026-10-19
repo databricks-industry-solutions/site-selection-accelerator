@@ -1,14 +1,14 @@
 # Hex2Vec embedding model (trained by the ETL job)
 
-_Captured 2026-10-19 16:11:14 UTC by `scripts/capture_evidence.py`._
+_Captured 2026-10-19 17:00:15 UTC by `scripts/capture_evidence.py`._
 
 Model artifacts in UC Volume `/Volumes/geo_sme_emea_catalog/site_selection/models/hex2vec`:
 
 | file | bytes | modified |
 |---|---|---|
-| config.json | 2,810 | 2026-10-19 16:10:14 UTC |
-| hex2vec_metadata.json | 2,827 | 2026-10-19 16:10:14 UTC |
-| model.pt | 24,957 | 2026-10-19 16:10:14 UTC |
+| config.json | 2,810 | 2026-10-19 16:57:51 UTC |
+| hex2vec_metadata.json | 2,827 | 2026-10-19 16:57:51 UTC |
+| model.pt | 24,957 | 2026-10-19 16:57:51 UTC |
 
 ## Training metadata (`hex2vec_metadata.json`)
 
@@ -18,4 +18,4 @@ Model artifacts in UC Volume `/Volumes/geo_sme_emea_catalog/site_selection/model
 - **Features (POIs + buildings):** 5,004,905
 - **Feature categories:** 43
 - **Encoder sizes:** [48, 24, 12] · **max epochs:** 10 · **batch size:** 256
-- **Saved at:** 2026-10-19T16:10:12.779040+00:00
+- **Saved at:** 2026-10-19T16:57:49.890641+00:00

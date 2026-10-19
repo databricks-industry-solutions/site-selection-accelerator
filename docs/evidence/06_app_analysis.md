@@ -1,44 +1,44 @@
 # Live app run (Databricks App API)
 
-_Captured 2026-10-19 16:33:23 UTC by `scripts/capture_evidence.py`._
+_Captured 2026-10-19 17:03:55 UTC by `scripts/capture_evidence.py`._
 
 - **App:** https://site-selection-accelerator-7474660412302141.aws.databricksapps.com
 - **Request:** brand `Pret A Manger` → London, GB (H3 res 9, competition β=1.0, catchment 0.8 km)
-- **Session:** `42c85d45ec08` · **end-to-end time:** 161.4s
-- **Saved to Delta:** analysis_id `82242033-67de-4e9c-bf42-aa5194471aa2` → geo_sme_emea_catalog.site_selection.analyses, geo_sme_emea_catalog.site_selection.analysis_brand_profiles, geo_sme_emea_catalog.site_selection.analysis_hexagons, geo_sme_emea_catalog.site_selection.analysis_competitors, geo_sme_emea_catalog.site_selection.analysis_fingerprints
+- **Session:** `1a14ed6518aa` · **end-to-end time:** 173.7s
+- **Saved to Delta:** analysis_id `e827d731-8e91-4f53-b873-f611c99e0e02` → geo_sme_emea_catalog.site_selection.analyses, geo_sme_emea_catalog.site_selection.analysis_brand_profiles, geo_sme_emea_catalog.site_selection.analysis_hexagons, geo_sme_emea_catalog.site_selection.analysis_competitors, geo_sme_emea_catalog.site_selection.analysis_fingerprints
 - **Hexagons scored:** 14,551 · existing brand cells: 262 · candidates with ≥50% cannibalization: 1,527 (10.7%)
 
 ## Progress stream (SSE)
 
 ```
    0.0s  starting
-   3.9s  loading_model
-   5.3s  resolving_brand
-  32.3s  tessellating
-  33.4s  querying_pois
-  34.1s  querying_buildings
-  36.6s  building_vectors
-  36.7s  generating_embeddings
-  42.7s  computing_similarity
-  42.7s  finding_competitors
-  47.4s  caching_results
- 132.3s  done
+   0.0s  loading_model
+   1.8s  resolving_brand
+  29.3s  tessellating
+  31.3s  querying_pois
+  41.8s  querying_buildings
+  47.1s  building_vectors
+  47.2s  generating_embeddings
+  52.7s  computing_similarity
+  52.7s  finding_competitors
+  58.6s  caching_results
+ 145.1s  done
 ```
 
 ## Top 10 candidate cells by opportunity score
 
 | hex_id | address | similarity | opportunity | cannibalization | nearest_own_store_km | competitors |
 |---|---|---|---|---|---|---|
-| 89194e6f38fffff |  | 0.9949 | 0.9997 | 0 | 2.202 | 0 |
-| 89195da48a7ffff | 2nd Floor, 35 Devonshire Pl | 0.9565 | 0.9975 | 0.7467 | 0.32 | 0 |
-| 89194ada51bffff | 19 Eastbourne Terrace | 0.9355 | 0.9963 | 0.7466 | 0.321 | 0 |
-| 89194adb0dbffff | 40 Uxbridge Rd | 0.9344 | 0.996 | 0.7464 | 0.321 | 0 |
-| 89195da626fffff | 2 Woodberry Grove | 0.9724 | 0.9958 | 0 | 3.381 | 1 |
-| 89194ada5c7ffff | 1-3 Lexham Gardens | 0.9978 | 0.9945 | 0.7466 | 0.321 | 2 |
-| 89195da4863ffff | 344 Edgware Rd | 0.9402 | 0.9933 | 0.7467 | 0.321 | 1 |
-| 89194e6ad77ffff | Office 27, 321-323 High Rd | 0.898 | 0.9932 | 0 | 2.39 | 0 |
-| 89194ad350bffff | - | 0.8979 | 0.9931 | 0.0653 | 1.367 | 0 |
-| 89195da6267ffff | 634 High Rd, North Finchley | 0.9291 | 0.9926 | 0 | 3.158 | 1 |
+| 89194e6f38fffff |  | 0.9739 | 0.9977 | 0 | 2.202 | 0 |
+| 89195da48a7ffff | 2nd Floor, 35 Devonshire Pl | 0.9587 | 0.9963 | 0.7467 | 0.32 | 0 |
+| 89194ad350bffff | - | 0.9472 | 0.9956 | 0.0653 | 1.367 | 0 |
+| 89195da4863ffff | 344 Edgware Rd | 0.9819 | 0.9951 | 0.7467 | 0.321 | 1 |
+| 89195da626fffff | 2 Woodberry Grove | 0.9701 | 0.994 | 0 | 3.381 | 1 |
+| 89195da546bffff | Unit 9, Spring Villa Park, Spring Villa Rd | 0.9238 | 0.9935 | 0 | 4.896 | 0 |
+| 89194ac2283ffff | High Street, Croydon | 0.9556 | 0.993 | 0.4978 | 0.649 | 1 |
+| 89195da6ba7ffff | 184 Upper Street | 0.9536 | 0.9929 | 0.7439 | 0.324 | 1 |
+| 89194ad2463ffff | Brunel Business Centre Unit 4 | 0.9121 | 0.9927 | 0.7266 | 0.346 | 0 |
+| 89194ada5c7ffff | 1-3 Lexham Gardens | 0.9896 | 0.9924 | 0.7466 | 0.321 | 2 |
 
 ## Drill-down for the top cell (`/api/results/{session}/hexagon/{hex}`)
 
@@ -50,5 +50,5 @@ _Captured 2026-10-19 16:33:23 UTC by `scripts/capture_evidence.py`._
 
 | id | hex_id | status | note | similarity | cannibalization_risk | nearest_store_km |
 |---|---|---|---|---|---|---|
-| 10 | 89195da48a7ffff | candidate |  | 0.9565 | 0.7467 | 0.32 |
-| 9 | 89194e6f38fffff | site_visit | Evidence run: top-ranked low-cannibalization cell | 0.9949 | 0 | 2.202 |
+| 12 | 89195da48a7ffff | candidate |  | 0.9587 | 0.7467 | 0.32 |
+| 11 | 89194e6f38fffff | site_visit | Evidence run: top-ranked low-cannibalization cell | 0.9739 | 0 | 2.202 |
