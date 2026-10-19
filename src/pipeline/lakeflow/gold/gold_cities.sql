@@ -2,7 +2,15 @@
 -- touches raw WKB division geometry.
 -- Polygon resolution: the locality's own area first; if Overture has none,
 -- ST_Union of every same-name region/county/neighbourhood/macrohood area
--- (covers city-states and metro areas); failing that, a ±0.15° box.
+-- (covers city-states and metro areas); failing that, a circle sized from the
+-- city's population at an assumed 5,000 residents/km² (typical of large
+-- European cores — Greater London is ~5,700); and only when population is
+-- unknown, a ±0.15° box. Overture ships some major cities (London,
+-- Stockholm, Reykjavík) as bare points, and a fixed box badly under- or
+-- over-covers them, which skews every hexagon score in the city.
+-- `polygon_source` records which rule produced the footprint.
+-- Overture now ships native GEOMETRY, so the old WKB round-trips and the
+-- REDUCE-based pairwise union collapse into a single ST_Union_Agg.
 -- `has_polygon` is a warn-only expectation so the event log records how many
 -- cities fall back to the box rather than silently degrading.
 
@@ -20,6 +28,7 @@ WITH localities AS (
         d.id,
         d.country,
         d.names.primary  AS city_name,
+        d.population,
         d.bbox
     FROM ${carto_divisions_catalog}.carto.division d
     WHERE d.subtype = 'locality'
@@ -44,15 +53,7 @@ fallback_area AS (
     SELECT
         cn.city_name,
         cn.country,
-        REDUCE(
-            COLLECT_LIST(da.geom),
-            CAST(NULL AS BINARY),
-            (acc, x) -> CASE
-                WHEN acc IS NULL THEN x
-                ELSE ST_AsBinary(ST_Union(ST_GeomFromWKB(acc), ST_GeomFromWKB(x)))
-            END,
-            acc -> acc
-        ) AS geom
+        ST_Union_Agg(da.geom) AS geom
     FROM cities_needing_fallback cn
     INNER JOIN ${carto_divisions_catalog}.carto.division d
         ON d.names.primary = cn.city_name AND d.country = cn.country
@@ -64,7 +65,26 @@ fallback_area AS (
 resolved AS (
     SELECT
         l.*,
-        COALESCE(la.geom, fa.geom) AS geom
+        CASE
+            WHEN la.geom IS NOT NULL THEN 'locality'
+            WHEN fa.geom IS NOT NULL THEN 'admin_union'
+            WHEN l.population > 0    THEN 'population_buffer'
+            ELSE 'bbox'
+        END AS polygon_source,
+        COALESCE(la.geom, fa.geom) AS geom,
+        COALESCE(
+            la.geom,
+            fa.geom,
+            -- Buffer in Web Mercator, scaling the radius by 1/cos(lat) so the
+            -- circle is true-distance on the ground, then back to WGS84.
+            CASE WHEN l.population > 0 THEN ST_Transform(
+                ST_Buffer(
+                    ST_Transform(ST_Point(l.bbox.xmin, l.bbox.ymin, 4326), 3857),
+                    1000 * SQRT(l.population / 5000.0 / PI()) / COS(RADIANS(l.bbox.ymin))
+                ),
+                4326
+            ) END
+        ) AS footprint
     FROM localities l
     LEFT JOIN locality_area la ON la.id = l.id
     LEFT JOIN fallback_area fa
@@ -75,9 +95,11 @@ SELECT
     r.city_name,
     CAST(r.bbox.xmin AS DOUBLE)                              AS center_lon,
     CAST(r.bbox.ymin AS DOUBLE)                              AS center_lat,
+    r.population,
     r.geom IS NOT NULL                                       AS has_polygon,
+    r.polygon_source,
     COALESCE(
-        ST_AsText(ST_GeomFromWKB(r.geom)),
+        ST_AsText(r.footprint),
         CONCAT(
             'POLYGON((',
             CAST(r.bbox.xmin - 0.15 AS STRING), ' ', CAST(r.bbox.ymin - 0.15 AS STRING), ', ',
@@ -89,19 +111,19 @@ SELECT
         )
     )                                                        AS geom_wkt,
     COALESCE(
-        CAST(ST_XMin(ST_GeomFromWKB(r.geom)) AS DOUBLE),
+        CAST(ST_XMin(r.footprint) AS DOUBLE),
         CAST(r.bbox.xmin - 0.15 AS DOUBLE)
     )                                                        AS bbox_xmin,
     COALESCE(
-        CAST(ST_XMax(ST_GeomFromWKB(r.geom)) AS DOUBLE),
+        CAST(ST_XMax(r.footprint) AS DOUBLE),
         CAST(r.bbox.xmin + 0.15 AS DOUBLE)
     )                                                        AS bbox_xmax,
     COALESCE(
-        CAST(ST_YMin(ST_GeomFromWKB(r.geom)) AS DOUBLE),
+        CAST(ST_YMin(r.footprint) AS DOUBLE),
         CAST(r.bbox.ymin - 0.15 AS DOUBLE)
     )                                                        AS bbox_ymin,
     COALESCE(
-        CAST(ST_YMax(ST_GeomFromWKB(r.geom)) AS DOUBLE),
+        CAST(ST_YMax(r.footprint) AS DOUBLE),
         CAST(r.bbox.ymin + 0.15 AS DOUBLE)
     )                                                        AS bbox_ymax
 FROM resolved r
